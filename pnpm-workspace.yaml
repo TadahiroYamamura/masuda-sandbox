@@ -1,0 +1,5 @@
+allowBuilds:
+  '@bufbuild/buf': true
+  esbuild: true
+  cpu-features: false
+  ssh2: false

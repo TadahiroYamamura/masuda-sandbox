@@ -3,6 +3,3 @@ plugins:
   - remote: buf.build/bufbuild/es
     out: src/gen
     opt: target=ts
-  - remote: buf.build/connectrpc/es
-    out: src/gen
-    opt: target=ts

@@ -3,8 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.19.0" },
-  "bin": { "masuda-sandbox": "./dist/cli.js" },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "bin": {
+    "masuda-sandbox": "./dist/cli.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "generate": "buf generate",
@@ -20,8 +24,9 @@
   },
   "devDependencies": {
     "@bufbuild/buf": "^1",
+    "@types/node": "^22.20.4",
+    "tsx": "^4",
     "typescript": "^5",
-    "vitest": "^3",
-    "tsx": "^4"
+    "vitest": "^3"
   }
 }
