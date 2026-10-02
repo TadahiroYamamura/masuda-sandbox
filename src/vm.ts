@@ -1,10 +1,11 @@
 import { VM, type DebugLogFn, type HttpHooks } from "@earendil-works/gondolin";
 
 import type { SandboxRecord } from "./sandboxes.js";
+import { toTcpHosts } from "./tcpmaps.js";
 
 // The rest of the service sees only this much of a Gondolin VM, which keeps
-// Gondolin's types from spreading beyond this file, exec.ts and files.ts.
-export type GuestVm = Pick<VM, "exec" | "fs" | "close" | "getHostPid">;
+// Gondolin's types from spreading beyond this file, exec.ts, files.ts and ssh.ts.
+export type GuestVm = Pick<VM, "exec" | "fs" | "enableSsh" | "close" | "getHostPid">;
 
 export interface VmNetwork {
   httpHooks: HttpHooks;
@@ -22,9 +23,10 @@ export async function bootVm(rec: SandboxRecord, imageDir: string, env: Record<s
     cpus: rec.cpus,
     env,
     httpHooks: net.httpHooks,
-    // per-host synthetic DNS is what tcp.hosts (tcp_maps, S6) needs; set now so
-    // that the guest's view of DNS does not change between work orders.
+    // tcp.hosts requires per-host synthetic DNS. It is set even without
+    // tcp_maps so that the guest's view of DNS does not depend on them.
     dns: { mode: "synthetic", syntheticHostMapping: "per-host" },
+    tcp: rec.tcpMaps.length > 0 ? { hosts: toTcpHosts(rec.tcpMaps) } : undefined,
     sessionLabel: rec.id,
   });
   try {

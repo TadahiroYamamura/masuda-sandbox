@@ -8,6 +8,7 @@ import { Egress, validatePolicy } from "./egress.js";
 import { EventQueue } from "./events.js";
 import { PolicySchema, SandboxSchema, SandboxState, type Sandbox, type SecretDecl } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
 import { log } from "./log.js";
+import { GuestSsh, type SshInfo } from "./ssh.js";
 import { bootVm, type GuestVm } from "./vm.js";
 
 export interface PolicyRecord {
@@ -56,6 +57,7 @@ interface Entry {
   egress?: Egress;
   events: EventQueue;
   vm?: GuestVm;
+  ssh?: GuestSsh;
   // Settles when boot finished either way; destroy waits on it so that a VM
   // still booting is not left running behind a removed entry.
   ready: Promise<void>;
@@ -98,10 +100,15 @@ export class SandboxRegistry {
   }
 
   running(id: string): RunningSandbox {
+    const e = this.runningEntry(id);
+    return { record: e.record, vm: e.vm!, env: guestEnv(e) };
+  }
+
+  private runningEntry(id: string): Entry {
     const e = this.entries.get(id);
     if (!e) throw new ConnectError(`sandbox ${JSON.stringify(id)} not found`, Code.NotFound);
     if (e.state !== SandboxState.RUNNING || !e.vm) throw new ConnectError(`sandbox ${JSON.stringify(id)} is not running`, Code.FailedPrecondition);
-    return { record: e.record, vm: e.vm, env: guestEnv(e) };
+    return e;
   }
 
   // A STOPPED or FAILED record with the same id is replaced: the contract only
@@ -123,6 +130,7 @@ export class SandboxRegistry {
     try {
       await this.persist();
       entry.vm = await bootVm(record, imageDir, guestEnv(entry), egress);
+      entry.ssh = new GuestSsh(entry.vm);
       if (entry.destroyed) throw new ConnectError(`sandbox ${JSON.stringify(record.id)} was destroyed while starting`, Code.Aborted);
       entry.state = SandboxState.RUNNING;
       log.info("sandbox running", { id: record.id, buildId: record.buildId, pid: entry.vm.getHostPid() });
@@ -152,6 +160,17 @@ export class SandboxRegistry {
     await this.persist();
   }
 
+  enableSsh(id: string, user: string): Promise<SshInfo> {
+    const e = this.runningEntry(id);
+    return e.ssh!.enable(user || e.record.defaultUser);
+  }
+
+  async disableSsh(id: string, user: string): Promise<void> {
+    const e = this.entries.get(id);
+    if (!e) throw new ConnectError(`sandbox ${JSON.stringify(id)} not found`, Code.NotFound);
+    await e.ssh?.disable(user || e.record.defaultUser);
+  }
+
   async destroy(id: string): Promise<void> {
     const e = this.entries.get(id);
     if (!e) return;
@@ -159,7 +178,7 @@ export class SandboxRegistry {
     this.entries.delete(id);
     await this.persist();
     await e.ready;
-    if (e.vm) await e.vm.close();
+    await closeVm(e);
     log.info("sandbox destroyed", { id });
   }
 
@@ -170,7 +189,7 @@ export class SandboxRegistry {
     const results = await Promise.allSettled(
       entries.map(async (e) => {
         await e.ready;
-        if (e.vm) await e.vm.close();
+        await closeVm(e);
         e.state = SandboxState.STOPPED;
       }),
     );
@@ -184,6 +203,14 @@ export class SandboxRegistry {
     this.queue = op.catch(() => {});
     return op;
   }
+}
+
+// vm.close() also closes Gondolin's current ssh access, but an EnableSsh still
+// in flight would open its host-side forwarder afterwards; closing GuestSsh
+// first makes that late access close itself.
+async function closeVm(e: Entry): Promise<void> {
+  await e.ssh?.close().catch((err) => log.error("closing ssh access failed", { id: e.record.id, error: err }));
+  if (e.vm) await e.vm.close();
 }
 
 function guestEnv(e: Entry): Record<string, string> {

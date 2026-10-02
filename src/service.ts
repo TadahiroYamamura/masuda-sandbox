@@ -8,11 +8,12 @@ import path from "node:path";
 import { buildImage, parseArch } from "./build.js";
 import { runExec } from "./exec.js";
 import { readGuestFile, writeGuestFile } from "./files.js";
-import { DestroySandboxResponseSchema, ImageSchema, ListImagesResponseSchema, ListSandboxesResponseSchema, SandboxService, SetPolicyResponseSchema, WriteFileResponseSchema, type CreateSandboxRequest, type Image } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
+import { DestroySandboxResponseSchema, DisableSshResponseSchema, ImageSchema, ListImagesResponseSchema, ListSandboxesResponseSchema, SandboxService, SetPolicyResponseSchema, SshAccessSchema, WriteFileResponseSchema, type CreateSandboxRequest, type Image } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
 import type { ImageRecord, ImageStore } from "./images.js";
 import { log } from "./log.js";
 import { ProcessError } from "./proc.js";
 import type { SandboxRecord, SandboxRegistry } from "./sandboxes.js";
+import { validateTcpMaps } from "./tcpmaps.js";
 
 function toImage(r: ImageRecord): Image {
   return create(ImageSchema, { buildId: r.buildId, name: r.name, arch: r.arch, createdAt: timestampFromDate(new Date(r.createdAt)), ociDigest: r.ociDigest });
@@ -36,7 +37,7 @@ function toRecord(req: CreateSandboxRequest): SandboxRecord {
     env: { ...req.env },
     policy: { allowedHosts: [...(req.policy?.allowedHosts ?? [])], enabledSecrets: [...(req.policy?.enabledSecrets ?? [])] },
     secretNames: req.secrets.map((s) => s.name),
-    tcpMaps: req.tcpMaps.map((m) => ({ host: m.host, port: m.port, upstream: m.upstream })),
+    tcpMaps: validateTcpMaps(req.tcpMaps.map((m) => ({ host: m.host, port: m.port, upstream: m.upstream }))),
     sshEgress: e && { allowedHosts: [...e.allowedHosts], agentSocket: e.agentSocket, knownHostsFile: e.knownHostsFile, pushAllowedRefs: [...e.pushAllowedRefs] },
   };
 }
@@ -96,6 +97,13 @@ export function sandboxServiceImpl(registry: SandboxRegistry, images: ImageStore
     async destroySandbox(req) {
       await registry.destroy(req.id);
       return create(DestroySandboxResponseSchema, {});
+    },
+    async enableSsh(req) {
+      return create(SshAccessSchema, await registry.enableSsh(req.id, req.user));
+    },
+    async disableSsh(req) {
+      await registry.disableSsh(req.id, req.user);
+      return create(DisableSshResponseSchema, {});
     },
     async *exec(req, ctx) {
       const sb = registry.running(req.id);
