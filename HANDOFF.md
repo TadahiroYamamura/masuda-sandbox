@@ -1,37 +1,28 @@
 # HANDOFF
 ## 作業項目
-S4（方針と秘密）完了。
-- `src/egress.ts`: `Egress`。サンドボックス1つ分のプレースホルダ・可変な`Policy`・Gondolinへ渡す`httpHooks`を持つ
-  - プレースホルダは`makePlaceholderFunc`（BASE62）。prefix/lengthの指定が片方でもあればそれ（lengthの既定40）、無ければ`masuda_secret_`+40文字。重なり・値への包含・8文字未満はInvalidArgument
-  - `createHttpHooks({allowedHosts: undefined, secrets: HEADERを持つ秘密だけ, isRequestAllowed, onRequest, onResponse})`。ヘッダ置換（Basic認証内も）はGondolinの既定
-  - 自前`onRequest`: 許可ホスト判定 → ヘッダ/URL/ボディに無効な秘密のプレースホルダがあれば`secret-not-enabled` → BODY秘密をボディ内で置換（latin1で往復、content-lengthを落として新しい`Request`）→ `httpStarted`を記録
-  - `isRequestAllowed`: ホストだけ再判定（リダイレクトのホップやフック後の確認）
-  - `setPolicy`: ポリシー差し替え + 無効な秘密はGondolinの`secretManager.updateSecret(name,{hosts: []})`で置換不能にする
-  - `onDebug`: Gondolinの"net"デバッグログから`tcp|udp blocked ... -> <ip:port>`を拾い`protocol`で記録（同じ宛先は5秒で重複除去）
-- `src/events.ts`: `EventQueue`（seq付き、直近1000件、`after(seq)`）。S7の配信はここから読む
-- `src/sandboxes.ts`: `Entry`に`egress`と`events`。`create`でEgressを作ってから起動。`setPolicy`（存在しなければNotFound、STOPPED復元分は名前だけで検証して記録を更新）。`running()`が`env`（record.env + プレースホルダ）を返し、Execはこれを使う。`snapshot`がplaceholdersを返す
-- `src/vm.ts`: `bootVm(rec, imageDir, env, {httpHooks, onDebug})`。`sandbox.debug: ["net"]`と`debugLog`
-- `src/service.ts`: `setPolicy`
-- 単体テスト`test/unit/egress.test.ts`（VMなしでフックを直接呼ぶ。6件）
+S5（ファイル転送）完了。
+- `src/files.ts`: `readGuestFile`・`writeGuestFile`
+  - ReadFile: Execで`stat -c "%F|%s"`（`-L`なし。`vm.fs.stat`は`stat -L`でリンクを辿るので使わない）→ 通常ファイル以外・存在しないパスはNotFound、上限（`max_bytes`、0なら64MiB）超過はResourceExhausted → `vm.fs.readFileStream`（64KiBチャンク）。読む途中で上限を超えたら（stat後に伸びた）ResourceExhausted
+  - WriteFile: rootのExecで準備（ownerの存在確認→無ければInvalidArgument、対象がディレクトリならFailedPrecondition、足りない親ディレクトリを作って新しく作った分を`chown -h owner:`、同じディレクトリに`mktemp -d .masuda-write.XXXXXXXX`（root、0700））→ `vm.fs.writeFile(<tmpdir>/f, AsyncIterable)` → `chmod <mode>`・`chown -h owner:`・`mv -f -T`・`rmdir`。失敗時は一時ディレクトリを`rm -rf`
+  - mode 0→0644、0o7777超はInvalidArgument。owner空→default_user。pathは絶対パスのみ（`path.posix.normalize`、`/`やNULはInvalidArgument）
+- `src/service.ts`: `readFile`・`writeFile`。先頭がheaderでない、2通目以降にheaderが来たらInvalidArgument
+- `src/vm.ts`: `GuestVm`に`fs`を追加
 ## 完了した契約テスト
-C-S1・C-S2・C-S3・C-S4。`node dist/cli.js -- serve --socket $XDG_RUNTIME_DIR/masuda-sandbox-s4.sock`を起動し`MASUDA_SANDBOX_SOCKET=... pnpm test:contract`で4 passed / 3 failed（C-S4は約7秒。C-S5はWriteFile未実装、C-S6はtcp_maps未配線で今は403（空のpolicyで拒否されるため。S3時点は502）、C-S7はWatchEvents未実装。いずれも想定どおり）。`pnpm test`は11 passed
-手動確認: 実VMで`httpStarted`/`httpFinished`（status・duration付き）/`httpDenied host-not-allowed`/`protocol`（ssh宛の22番、UDP 123番）がキューに入ること
+C-S1〜C-S5。`node dist/cli.js -- serve --socket $XDG_RUNTIME_DIR/masuda-sandbox-s5.sock`を起動し`MASUDA_SANDBOX_SOCKET=... pnpm test:contract`で5 passed / 2 failed（C-S5は約5秒。C-S6は403 Forbidden、C-S7は`seen`が空。いずれもS6・S7未実装で想定どおり）。`pnpm test`は11 passed
+手動確認（一時テストで実施し削除済み）: 40MiBのランダムデータを書いて読み戻しsha256一致（書き約2.4秒、読み約2.6秒、220チャンク）。新しい親ディレクトリ3段がubuntu:ubuntu 755、ファイルは指定どおり600。一時ディレクトリは残らない。空ファイル（dataなし）は0バイトで書ける。エラー: ディレクトリ→FailedPrecondition、存在しないowner・相対パス・headerなし→InvalidArgument
 ## 未完と理由
-- S5以降は範囲外
-- 未知プロトコル（例: 25番へ平文）とCONNECTの拒否はイベントにならない。Gondolinは`network-stack`の内部イベント`tcp-deny`にしか出さず、公開APIから届かない
-- `last_http_activity`・`inflight_http_requests`はS7（work-ordersでS7の項目）
+- S6以降は範囲外
 ## 次の一手
-`docs/work-orders.md`のS5（ファイル転送）
+`docs/work-orders.md`のS6（tcp_mapsとSSH）
 ## 注意点
-- 自前の`onRequest`があるとGondolinは`isRequestAllowed`をフック適用**後**に呼ぶ（`ON_REQUEST_EARLY_POLICY_SAFE`がfalseになる）。プレースホルダの検査は`onRequest`でしかできない
-- Gondolinは`onRequest`をリダイレクトの各ホップで呼ぶが、`onResponse`は最終ホップで1回だけ。`httpFinished`はmethod+URLのFIFOで対応付け、来なかったものは10分で忘れる
-- 秘密が1つでもあると、ボディ付きリクエストは全体を読んでから中継する
-- 有効な秘密でも、そのSecretDecl.hostsに合わない宛先へプレースホルダを置換位置（HEADER秘密ならヘッダ、BODY秘密ならボディ）で送ると`secret-not-enabled`で拒否。置換位置でない場所（HEADERだけの秘密がボディにある等）はプレースホルダのまま通す
-- `CreateSandboxRequest.env`と秘密名が衝突するとInvalidArgument
-- `sandbox.debug: ["net"]`はパケットごとにデバッグ文字列を作る。性能が問題になったら外す（`protocol`イベントを失う）
-- S6で`tcp_maps`を配線するとき: `tcp.hosts`宛はHTTP中継を通らないので`Egress`の判定外。C-S6の`curl http://masuda.internal:<port>`が今403なのは、tcp.hostsが無くHTTP中継に入って許可ホストに無いため
-- 契約テストは毎回C-S2でイメージを作る。このセッションでGondolin資産`c279c701-...`が増えた（images.jsonに記録済み。`~/.cache/gondolin/images/objects`は計3.7G）
+- **Gondolinのファイル操作はExecと排他**。`server-ops.js`の`waitForExecIdle`が実行中のExecがすべて終わるまで10msごとに待ち、ファイル操作中に来たExecは`execQueue`で開始を待たされる。長時間のExec（timeoutなしで終わらないもの）があるとReadFile/WriteFileは返らない（ctxのsignalで中断はできる）。masudaはclaudeをtmuxで動かすのでExecは短い想定だが、常駐Execを使う設計にするなら問題になる。避けるならファイル転送をExecのstdin/stdoutで実装し直す
+- ReadFileの種別判定と読み込みは別のゲスト操作。間にシンボリックリンクへ差し替えられると辿る（読み込みはroot）。ゲストのroot専用ファイルにホストの秘密は無い（秘密の値はゲストに入らない）ので許容した
+- WriteFileの一時ディレクトリは親ディレクトリ（多くはゲストユーザーが書ける）に置くので、ゲストユーザーは一時ディレクトリ自体をrenameできる。中身はroot 0700で触れない
+- 親ディレクトリの途中にシンボリックリンクがあれば辿る（契約が辿らないと言っているのは最終要素だけと解釈）
+- `vm.fs.*`はGondolinのsandboxd経由でrootとして動く
+- S6で`tcp_maps`を配線するとき: `tcp.hosts`宛はHTTP中継を通らないので`Egress`の判定外（S4からの引き継ぎ）
+- 契約テストは毎回C-S2でイメージを作る。このセッションでGondolin資産`18056cd1-...`が増えた（images.jsonに記録済み。`~/.cache/gondolin/images/objects`は計4.5G）。`b0ac34bd-...`（17:52 JST作成）はこのセッションのものではない
 - 無関係なQEMU（PID 12244）とGondolin資産`3cd7a864...`・`c4dc6a9f...`は親セッションのもの。触っていない
-- 残したもの: QEMUなし（12244以外）。dockerタグ`masuda-sandbox/image:x86_64-3f14a23ce3f7d022`（S2から継続）と`masuda-sandbox-test:latest`（このセッション以前からある）。`sandboxes.json`は空。サービスは停止済み
+- 残したもの: QEMUなし（12244以外）。dockerタグ`masuda-sandbox/image:x86_64-3f14a23ce3f7d022`（S2から継続）と`masuda-sandbox-test:latest`（以前から）。`sandboxes.json`は空。サービスは停止済み
 ## 契約への提案
 なし
