@@ -1,16 +1,20 @@
 import { Code, ConnectError } from "@connectrpc/connect";
 import { VM, type DebugLogFn, type HttpHooks } from "@earendil-works/gondolin";
 
+import type { GuestConnections } from "./egress.js";
+import { watchConnections } from "./netwatch.js";
 import type { SandboxRecord } from "./sandboxes.js";
 import { toTcpHosts } from "./tcpmaps.js";
 
 // The rest of the service sees only this much of a Gondolin VM, which keeps
-// Gondolin's types from spreading beyond this file, exec.ts, files.ts and ssh.ts.
+// Gondolin's types from spreading beyond this file, exec.ts, files.ts, ssh.ts
+// and netwatch.ts.
 export type GuestVm = Pick<VM, "exec" | "fs" | "enableSsh" | "close" | "getHostPid">;
 
 export interface VmNetwork {
   httpHooks: HttpHooks;
   onDebug: DebugLogFn;
+  connections: GuestConnections;
 }
 
 export async function bootVm(rec: SandboxRecord, imageDir: string, env: Record<string, string>, net: VmNetwork): Promise<GuestVm> {
@@ -33,6 +37,7 @@ export async function bootVm(rec: SandboxRecord, imageDir: string, env: Record<s
     // guest during start(); the base image is never touched.
     rootfs: rec.diskMib ? { size: `${rec.diskMib}M` } : undefined,
   });
+  watchConnections(vm, net.connections);
   try {
     await vm.start();
   } catch (e) {

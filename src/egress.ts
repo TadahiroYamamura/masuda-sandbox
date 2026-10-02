@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import { Code, ConnectError } from "@connectrpc/connect";
 import {
   BASE62_ALPHABET,
@@ -27,9 +29,12 @@ interface Secret {
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const DEFAULT_PLACEHOLDER_PREFIX = "masuda_secret_";
 const DEFAULT_PLACEHOLDER_LENGTH = 40;
-// Started requests whose response never came (upstream error, redirect hops
-// that only the last hop answers) are forgotten after this long.
+// A safety net only: started requests are normally finished through their
+// connection (see GuestConnections). One whose end was never observed (the
+// connection tracking is unavailable, or Gondolin never reported the close)
+// stops counting as in flight after this long.
 const PENDING_TTL_MS = 10 * 60_000;
+const MAX_TRACKED_CONNECTIONS = 4096;
 const PROTOCOL_DENY_DEDUPE_MS = 5_000;
 
 function invalid(msg: string): ConnectError {
@@ -112,6 +117,79 @@ function denied(reason: DenyReason, host: string): HttpRequestBlockedError {
   return new HttpRequestBlockedError(`${reason}: ${host}`);
 }
 
+interface Started {
+  id: bigint;
+  startedAt: number;
+}
+
+interface Connection {
+  // The hop waiting for its response on this connection.
+  hop: Started | undefined;
+  closed: boolean;
+  seenAt: number;
+}
+
+// The guest's TCP connections as Gondolin's network backend sees them, so that
+// a started request can be finished when its connection ends without a
+// response. Gondolin's public hooks carry no such signal: onResponse is
+// skipped on every failure path, the Request given to onRequest has no abort
+// signal, and when the guest disconnects Gondolin keeps fetching and calls
+// onResponse later as if nothing happened. Gondolin answers every guest
+// request with "Connection: close", so one connection carries one guest
+// request plus the redirect hops Gondolin follows for it.
+//
+// run() wraps Gondolin's handling of the guest's bytes in an AsyncLocalStorage
+// context, which onRequest/onResponse read back to learn their connection.
+// This was chosen over matching Gondolin's per-session request fields to the
+// hook's Request by URL, which is ambiguous for concurrent identical requests
+// and cannot tell a redirect hop from a new request. src/netwatch.ts installs
+// the calls on the backend.
+export class GuestConnections {
+  private readonly als = new AsyncLocalStorage<Connection>();
+  private readonly byKey = new Map<string, Connection>();
+
+  constructor(private readonly onEnd: (hop: Started) => void) {}
+
+  current(): Connection | undefined {
+    return this.als.getStore();
+  }
+
+  opened(key: string): void {
+    this.end(key);
+    this.track(key);
+  }
+
+  run<T>(key: string, fn: () => T): T {
+    const c = this.byKey.get(key) ?? this.track(key);
+    c.seenAt = Date.now();
+    return this.als.run(c, fn);
+  }
+
+  closed(key: string): void {
+    this.end(key);
+  }
+
+  private track(key: string): Connection {
+    const c: Connection = { hop: undefined, closed: false, seenAt: Date.now() };
+    this.byKey.set(key, c);
+    if (this.byKey.size > MAX_TRACKED_CONNECTIONS) {
+      const now = Date.now();
+      for (const [k, v] of this.byKey) if (now - v.seenAt >= PENDING_TTL_MS) this.byKey.delete(k);
+    }
+    return c;
+  }
+
+  private end(key: string): void {
+    const c = this.byKey.get(key);
+    if (!c) return;
+    this.byKey.delete(key);
+    c.closed = true;
+    const hop = c.hop;
+    c.hop = undefined;
+    if (hop) this.onEnd(hop);
+  }
+}
+
 // Owns the HTTP side of one sandbox: the placeholders the guest sees, the
 // mutable Policy that every request is checked against, and the hooks handed
 // to Gondolin. Header substitution is Gondolin's (via createHttpHooks); body
@@ -127,11 +205,15 @@ function denied(reason: DenyReason, host: string): HttpRequestBlockedError {
 export class Egress {
   readonly placeholders: Record<string, string>;
   readonly httpHooks: HttpHooks;
+  readonly connections = new GuestConnections((hop) => this.finish(hop, 0));
   private readonly secrets: Secret[];
   private readonly manager: SecretManager;
   private policy: PolicyRecord;
   private nextRequestId = 0n;
-  private readonly pending = new Map<string, { id: bigint; startedAt: number }[]>();
+  // Every started request not yet finished. byRequest is used only when a hook
+  // runs outside any tracked connection; it pairs by method and URL.
+  private readonly open = new Map<bigint, Started>();
+  private readonly byRequest = new Map<string, Started[]>();
   private readonly recentProtocolDenials = new Map<string, number>();
   private lastActivity: Date | undefined;
 
@@ -158,13 +240,10 @@ export class Egress {
     return { allowedHosts: [...this.policy.allowedHosts], enabledSecrets: [...this.policy.enabledSecrets] };
   }
 
-  // inflight counts what started and has not finished, minus what the
-  // PENDING_TTL_MS rule has given up on, so that a request whose response
-  // never came does not keep the sandbox looking busy forever.
   activity(): { last: Date | undefined; inflight: number } {
     const now = Date.now();
     let inflight = 0;
-    for (const list of this.pending.values()) for (const p of list) if (now - p.startedAt < PENDING_TTL_MS) inflight++;
+    for (const p of this.open.values()) if (now - p.startedAt < PENDING_TTL_MS) inflight++;
     return { last: this.lastActivity, inflight };
   }
 
@@ -246,38 +325,67 @@ export class Egress {
       }
     }
 
-    this.recordStarted(method, host, url.pathname, req.url);
+    const conn = this.connections.current();
+    if (conn?.closed) {
+      // A redirect hop Gondolin would fetch for a guest that already left;
+      // nobody can receive its response.
+      throw new HttpRequestBlockedError("guest closed the connection");
+    }
+    // A new hop on a connection that still has one waiting means Gondolin is
+    // following a redirect. That hop's 3xx never reaches the hooks, so it
+    // ends with status 0 like any other hop the guest got no response for.
+    if (conn?.hop) this.finish(conn.hop, 0);
+    const started = this.recordStarted(method, host, url.pathname);
+    if (conn) conn.hop = started;
+    else this.pushByRequest(`${method} ${req.url}`, started);
     return next;
   }
 
-  private recordStarted(method: string, host: string, path: string, url: string): void {
-    const id = ++this.nextRequestId;
-    const now = Date.now();
-    const key = `${method} ${url}`;
-    const list = this.pending.get(key) ?? [];
-    list.push({ id, startedAt: now });
-    this.pending.set(key, list);
-    if (this.pending.size > 1000) this.prunePending(now);
-    this.lastActivity = new Date(now);
-    this.events.push({ case: "httpStarted", value: { requestId: id, method, host, path } });
+  private recordStarted(method: string, host: string, path: string): Started {
+    const s: Started = { id: ++this.nextRequestId, startedAt: Date.now() };
+    this.open.set(s.id, s);
+    if (this.open.size > 1000) this.pruneOpen(s.startedAt);
+    this.lastActivity = new Date(s.startedAt);
+    this.events.push({ case: "httpStarted", value: { requestId: s.id, method, host, path } });
+    return s;
   }
 
-  private prunePending(now: number): void {
-    for (const [k, list] of this.pending) {
-      const live = list.filter((p) => now - p.startedAt < PENDING_TTL_MS);
-      if (live.length === 0) this.pending.delete(k);
-      else this.pending.set(k, live);
+  private pushByRequest(key: string, s: Started): void {
+    const list = this.byRequest.get(key) ?? [];
+    list.push(s);
+    this.byRequest.set(key, list);
+  }
+
+  private pruneOpen(now: number): void {
+    for (const [id, p] of this.open) if (now - p.startedAt >= PENDING_TTL_MS) this.open.delete(id);
+    for (const [k, list] of this.byRequest) {
+      const live = list.filter((p) => this.open.has(p.id));
+      if (live.length === 0) this.byRequest.delete(k);
+      else this.byRequest.set(k, live);
     }
   }
 
-  private onResponse(res: Response, req: Request): undefined {
-    const key = `${req.method.toUpperCase()} ${req.url}`;
-    const list = this.pending.get(key);
-    const p = list?.shift();
-    if (list && list.length === 0) this.pending.delete(key);
-    if (!p) return undefined;
+  // Emits the one HttpRequestFinished of a started request; later calls for
+  // the same request (e.g. Gondolin's onResponse after the guest left) do nothing.
+  private finish(s: Started, status: number): void {
+    if (!this.open.delete(s.id)) return;
     this.lastActivity = new Date();
-    this.events.push({ case: "httpFinished", value: { requestId: p.id, status: res.status, durationMs: Date.now() - p.startedAt } });
+    this.events.push({ case: "httpFinished", value: { requestId: s.id, status, durationMs: Date.now() - s.startedAt } });
+  }
+
+  private onResponse(res: Response, req: Request): undefined {
+    const conn = this.connections.current();
+    if (conn) {
+      const hop = conn.hop;
+      conn.hop = undefined;
+      if (hop) this.finish(hop, res.status);
+      return undefined;
+    }
+    const key = `${req.method.toUpperCase()} ${req.url}`;
+    const list = this.byRequest.get(key);
+    const p = list?.shift();
+    if (list && list.length === 0) this.byRequest.delete(key);
+    if (p) this.finish(p, res.status);
     return undefined;
   }
 }

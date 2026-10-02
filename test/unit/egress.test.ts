@@ -69,4 +69,138 @@ describe("Egress", () => {
     const { eg } = setup();
     expect(() => eg.setPolicy({ allowedHosts: [], enabledSecrets: ["NOPE"] })).toThrow(/unknown secret/);
   });
+
+  describe("finishing started requests", () => {
+    const finished = (q: EventQueue) => q.after(0n).flatMap((e) => (e.event.case === "httpFinished" ? [[Number(e.event.value.requestId), e.event.value.status]] : []));
+    const ok = (status = 200) => new Response("x", { status });
+    // As Gondolin does: the hooks run inside the handling of the guest's bytes.
+    const onConn = <T>(eg: Egress, key: string, fn: () => Promise<T>) => eg.connections.run(key, fn);
+    const until = async (cond: () => boolean) => {
+      for (let i = 0; i < 100 && !cond(); i++) await new Promise((r) => setImmediate(r));
+      expect(cond()).toBe(true);
+    };
+
+    it("finishes with the response status on the request's connection", async () => {
+      const { eg, events } = setup();
+      eg.connections.opened("k1");
+      await onConn(eg, "k1", async () => {
+        const req = new Request("https://api.example.com/a");
+        await eg.httpHooks.onRequest!(req);
+        expect(eg.activity().inflight).toBe(1);
+        await eg.httpHooks.onResponse!(ok(201), req);
+      });
+      eg.connections.closed("k1");
+      expect(finished(events)).toEqual([[1, 201]]);
+      expect(eg.activity().inflight).toBe(0);
+    });
+
+    it("finishes with status 0 when the guest closes first, and ignores the late response", async () => {
+      const { eg, events } = setup();
+      eg.connections.opened("k1");
+      const req = new Request("https://api.example.com/slow");
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      const handling = onConn(eg, "k1", async () => {
+        await eg.httpHooks.onRequest!(req);
+        await gate; // Gondolin keeps fetching after the guest left
+        await eg.httpHooks.onResponse!(ok(), req);
+      });
+      await until(() => eg.activity().inflight === 1);
+      eg.connections.closed("k1");
+      expect(finished(events)).toEqual([[1, 0]]);
+      expect(eg.activity().inflight).toBe(0);
+
+      // A new request for the same URL on another connection is not finished by the old response.
+      eg.connections.opened("k2");
+      await onConn(eg, "k2", async () => eg.httpHooks.onRequest!(new Request("https://api.example.com/slow")));
+      release();
+      await handling;
+      expect(finished(events)).toEqual([[1, 0]]);
+      expect(eg.activity().inflight).toBe(1);
+    });
+
+    it("keeps the late response in the closed connection's context", async () => {
+      const { eg, events } = setup();
+      eg.connections.opened("k1");
+      const req = new Request("https://api.example.com/slow");
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      const handling = onConn(eg, "k1", async () => {
+        await eg.httpHooks.onRequest!(req);
+        await gate; // upstream still fetching
+        await eg.httpHooks.onResponse!(ok(), req);
+      });
+      await until(() => eg.activity().inflight === 1);
+      eg.connections.closed("k1");
+      eg.connections.opened("k1"); // the key is reused by a new connection
+      await onConn(eg, "k1", async () => eg.httpHooks.onRequest!(new Request("https://api.example.com/slow")));
+      release();
+      await handling;
+      expect(finished(events)).toEqual([[1, 0]]);
+      expect(eg.activity().inflight).toBe(1);
+    });
+
+    it("finishes each redirect hop when the next one starts", async () => {
+      const { eg, events } = setup();
+      eg.connections.opened("k1");
+      await onConn(eg, "k1", async () => {
+        await eg.httpHooks.onRequest!(new Request("https://api.example.com/r1"));
+        await eg.httpHooks.onRequest!(new Request("https://api.example.com/r2"));
+        const last = new Request("https://api.example.com/final");
+        await eg.httpHooks.onRequest!(last);
+        await eg.httpHooks.onResponse!(ok(), last);
+      });
+      eg.connections.closed("k1");
+      expect(finished(events)).toEqual([[1, 0], [2, 0], [3, 200]]);
+    });
+
+    it("finishes with status 0 when the request fails without a response", async () => {
+      const { eg, events } = setup();
+      eg.connections.opened("k1");
+      await onConn(eg, "k1", async () => {
+        await eg.httpHooks.onRequest!(new Request("https://api.example.com/x"));
+        // upstream connect or TLS failed: Gondolin answers 502 itself and closes.
+      });
+      expect(finished(events)).toEqual([]);
+      eg.connections.closed("k1");
+      expect(finished(events)).toEqual([[1, 0]]);
+    });
+
+    it("ends a connection whose key is opened again without a close", async () => {
+      const { eg, events } = setup();
+      eg.connections.opened("k1");
+      await onConn(eg, "k1", async () => eg.httpHooks.onRequest!(new Request("https://api.example.com/x")));
+      eg.connections.opened("k1");
+      expect(finished(events)).toEqual([[1, 0]]);
+    });
+
+    it("refuses further hops for a guest that already left", async () => {
+      const { eg, events } = setup();
+      eg.connections.opened("k1");
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      const handling = onConn(eg, "k1", async () => {
+        await eg.httpHooks.onRequest!(new Request("https://api.example.com/r1"));
+        await gate; // the 3xx arrives after the guest left
+        await eg.httpHooks.onRequest!(new Request("https://api.example.com/r2"));
+      });
+      await until(() => eg.activity().inflight === 1);
+      eg.connections.closed("k1");
+      release();
+      await expect(handling).rejects.toThrow(/guest closed/);
+      expect(events.after(0n).filter((e) => e.event.case === "httpStarted")).toHaveLength(1);
+      expect(finished(events)).toEqual([[1, 0]]);
+    });
+
+    it("pairs by method and URL when the hooks run outside any connection", async () => {
+      const { eg, events } = setup();
+      const a = new Request("https://api.example.com/a");
+      const b = new Request("https://api.example.com/b");
+      await eg.httpHooks.onRequest!(a);
+      await eg.httpHooks.onRequest!(b);
+      await eg.httpHooks.onResponse!(ok(404), b);
+      expect(finished(events)).toEqual([[2, 404]]);
+      expect(eg.activity().inflight).toBe(1);
+    });
+  });
 });
