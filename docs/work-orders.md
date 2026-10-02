@@ -65,6 +65,7 @@
 
 ## S9. 硬化
 
+- `BuildImage`の冪等化: `docker build`の結果の`oci_digest`が`images.json`の既存エントリと同じで、その資産ディレクトリが実在するなら、`gondolin build`を省いて既存の`Image`を返す。契約テストを回すたびに約390MBの資産が増えるのを止める（S3時点で確認）
 - 1サンドボックスあたりのExec同時数の上限、`ReadFile`既定64MiB、イベントバッファ上限
 - サービスのメトリクス（サンドボックス数、QEMUのRSS）を`ListSandboxes`に載せない。別途ログへ
 - macOSでの動作確認はM5で行う。ここではLinux
