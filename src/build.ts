@@ -13,9 +13,15 @@ export interface BuildRequest {
   name: string;
   arch: Arch;
   signal?: AbortSignal;
+  // Returns the build id of existing Gondolin assets made from this OCI
+  // digest, if any; the Gondolin step (~400MB of new assets) is then skipped.
+  reusable?: (ociDigest: string) => Promise<string | undefined>;
 }
 
-export type BuildEvent = { log: string } | { built: { buildId: string; ociDigest: string } };
+export type BuildEvent =
+  | { log: string }
+  | { built: { buildId: string; ociDigest: string } }
+  | { reused: { buildId: string; ociDigest: string } };
 
 export function hostArch(): Arch {
   return process.arch === "arm64" ? "aarch64" : "x86_64";
@@ -53,6 +59,13 @@ export async function* buildImage(req: BuildRequest): AsyncGenerator<BuildEvent,
       yield { log: l };
     }
     const ociDigest = (await fs.readFile(iidFile, "utf8")).trim();
+
+    const existing = await req.reusable?.(ociDigest);
+    if (existing) {
+      yield { log: `==> reusing existing gondolin assets ${existing} for ${ociDigest} (gondolin build skipped)` };
+      yield { reused: { buildId: existing, ociDigest } };
+      return;
+    }
 
     // Gondolin's OCI importer takes an image reference rather than a bare
     // image id, so the result gets a tag derived from its digest. Identical

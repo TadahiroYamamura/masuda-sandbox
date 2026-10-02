@@ -9,6 +9,7 @@ import { gcSessions } from "@earendil-works/gondolin";
 import { SandboxService } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
 import { log } from "./log.js";
 import { ImageStore } from "./images.js";
+import { startMetricsLog } from "./metrics.js";
 import { SandboxRegistry } from "./sandboxes.js";
 import { sandboxServiceImpl } from "./service.js";
 
@@ -75,12 +76,14 @@ export async function serve(opts: ServeOptions): Promise<void> {
   // The API has no authentication; the socket's permissions are the boundary.
   await fs.chmod(socketPath, 0o600);
   log.info("listening", { socket: socketPath, pid: process.pid });
+  const stopMetrics = startMetricsLog(registry, Number(process.env.MASUDA_SANDBOX_METRICS_INTERVAL_MS) || undefined);
 
   let shuttingDown = false;
   const shutdown = async (signal: NodeJS.Signals) => {
     if (shuttingDown) return;
     shuttingDown = true;
     log.info("shutting down", { signal });
+    stopMetrics();
     server.close();
     for (const s of sessions) s.close();
     const failures = await registry.shutdown();

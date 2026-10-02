@@ -7,6 +7,7 @@ import { dataDir, readJsonFile, writeJsonFile } from "./datafile.js";
 import { Egress, validatePolicy } from "./egress.js";
 import { EventQueue } from "./events.js";
 import { PolicySchema, SandboxSchema, SandboxState, type Sandbox, type SandboxEvent, type SecretDecl } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
+import { ExecSlots } from "./exec.js";
 import { log } from "./log.js";
 import { GuestSsh, type SshInfo } from "./ssh.js";
 import { bootVm, type GuestVm } from "./vm.js";
@@ -56,6 +57,7 @@ interface Entry {
   // Absent for sandboxes restored as STOPPED: secret values are not persisted.
   egress?: Egress;
   events: EventQueue;
+  execSlots: ExecSlots;
   vm?: GuestVm;
   ssh?: GuestSsh;
   monitor?: NodeJS.Timeout;
@@ -68,6 +70,7 @@ interface Entry {
 export interface RunningSandbox {
   record: SandboxRecord;
   vm: GuestVm;
+  execSlots: ExecSlots;
   // record.env plus the secret placeholders; what every Exec starts from.
   env: Record<string, string>;
 }
@@ -89,7 +92,7 @@ export class SandboxRegistry {
     for (const record of Array.isArray(parsed?.sandboxes) ? parsed.sandboxes : []) {
       const events = new EventQueue();
       events.close();
-      this.entries.set(record.id, { record, state: SandboxState.STOPPED, failure: "", events, ready: Promise.resolve(), destroyed: false });
+      this.entries.set(record.id, { record, state: SandboxState.STOPPED, failure: "", events, execSlots: new ExecSlots(), ready: Promise.resolve(), destroyed: false });
     }
   }
 
@@ -102,6 +105,12 @@ export class SandboxRegistry {
     return e && snapshot(e);
   }
 
+  metrics(): { total: number; vms: { id: string; pid: number | null; execs: number }[] } {
+    const all = [...this.entries.values()];
+    const vms = all.filter((e) => e.state === SandboxState.RUNNING && e.vm).map((e) => ({ id: e.record.id, pid: e.vm!.getHostPid(), execs: e.execSlots.inUse }));
+    return { total: all.length, vms };
+  }
+
   watchEvents(id: string, afterSeq: bigint, signal: AbortSignal): AsyncGenerator<SandboxEvent> {
     const e = this.entries.get(id);
     if (!e) throw new ConnectError(`sandbox ${JSON.stringify(id)} not found`, Code.NotFound);
@@ -110,7 +119,7 @@ export class SandboxRegistry {
 
   running(id: string): RunningSandbox {
     const e = this.runningEntry(id);
-    return { record: e.record, vm: e.vm!, env: guestEnv(e) };
+    return { record: e.record, vm: e.vm!, execSlots: e.execSlots, env: guestEnv(e) };
   }
 
   private runningEntry(id: string): Entry {
@@ -134,7 +143,7 @@ export class SandboxRegistry {
     const egress = new Egress(secrets, record.policy, events);
     record.policy = egress.currentPolicy;
     let settle!: () => void;
-    const entry: Entry = { record, state: SandboxState.STARTING, failure: "", egress, events, ready: new Promise((r) => (settle = r)), destroyed: false };
+    const entry: Entry = { record, state: SandboxState.STARTING, failure: "", egress, events, execSlots: new ExecSlots(), ready: new Promise((r) => (settle = r)), destroyed: false };
     this.entries.set(record.id, entry);
     setState(entry, SandboxState.STARTING, "");
     try {

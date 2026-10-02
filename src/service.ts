@@ -56,9 +56,17 @@ export function sandboxServiceImpl(registry: SandboxRegistry, images: ImageStore
 
       log.info("image build started", { contextDir, name: req.name, arch });
       try {
-        for await (const ev of buildImage({ contextDir, dockerfile: req.dockerfile || "Dockerfile", name: req.name, arch, signal: ctx.signal })) {
+        const reusable = async (ociDigest: string) => (await images.findReusable(ociDigest, arch))?.buildId;
+        for await (const ev of buildImage({ contextDir, dockerfile: req.dockerfile || "Dockerfile", name: req.name, arch, signal: ctx.signal, reusable })) {
           if ("log" in ev) {
             yield { event: { case: "logLine", value: ev.log } };
+            continue;
+          }
+          if ("reused" in ev) {
+            const rec = await images.get(ev.reused.buildId);
+            if (!rec) throw new ConnectError(`image ${ev.reused.buildId} vanished from images.json during the build`, Code.Internal);
+            log.info("image reused", { ...rec });
+            yield { event: { case: "built", value: toImage(rec) } };
             continue;
           }
           const rec: ImageRecord = { buildId: ev.built.buildId, name: req.name, arch, createdAt: new Date().toISOString(), ociDigest: ev.built.ociDigest };
@@ -107,7 +115,12 @@ export function sandboxServiceImpl(registry: SandboxRegistry, images: ImageStore
     },
     async *exec(req, ctx) {
       const sb = registry.running(req.id);
-      for await (const ev of runExec(sb.vm, req, sb.record.defaultUser, sb.env, ctx.signal)) yield { event: ev };
+      const release = sb.execSlots.acquire();
+      try {
+        for await (const ev of runExec(sb.vm, req, sb.record.defaultUser, sb.env, ctx.signal)) yield { event: ev };
+      } finally {
+        release();
+      }
     },
     async *readFile(req, ctx) {
       const sb = registry.running(req.id);

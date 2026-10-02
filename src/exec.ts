@@ -75,6 +75,32 @@ export function guestArgv(spec: ExecSpec, defaultUser: string, baseEnv: Record<s
   return ["/bin/sh", "-c", 'exec "$@"', "masuda-exec", ...out];
 }
 
+export const MAX_CONCURRENT_EXECS = 8;
+
+// Caps how many Execs one sandbox runs at once. Gondolin multiplexes them over
+// one virtio channel to a single guest daemon, so an unbounded caller (a loop
+// that never waits) would starve the sandbox's other users.
+export class ExecSlots {
+  private used = 0;
+
+  constructor(private readonly max: number = MAX_CONCURRENT_EXECS) {}
+
+  get inUse(): number {
+    return this.used;
+  }
+
+  acquire(): () => void {
+    if (this.used >= this.max) throw new ConnectError(`too many concurrent execs (limit ${this.max})`, Code.ResourceExhausted);
+    this.used += 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.used -= 1;
+    };
+  }
+}
+
 const signalNames = new Map<number, string>(Object.entries(os.constants.signals).map(([name, num]) => [num, name]));
 
 export async function* runExec(vm: GuestVm, spec: ExecSpec, defaultUser: string, baseEnv: Record<string, string>, signal: AbortSignal): AsyncGenerator<ExecOutput> {
