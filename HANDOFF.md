@@ -1,28 +1,33 @@
 # HANDOFF
 ## 作業項目
-S5（ファイル転送）完了。
-- `src/files.ts`: `readGuestFile`・`writeGuestFile`
-  - ReadFile: Execで`stat -c "%F|%s"`（`-L`なし。`vm.fs.stat`は`stat -L`でリンクを辿るので使わない）→ 通常ファイル以外・存在しないパスはNotFound、上限（`max_bytes`、0なら64MiB）超過はResourceExhausted → `vm.fs.readFileStream`（64KiBチャンク）。読む途中で上限を超えたら（stat後に伸びた）ResourceExhausted
-  - WriteFile: rootのExecで準備（ownerの存在確認→無ければInvalidArgument、対象がディレクトリならFailedPrecondition、足りない親ディレクトリを作って新しく作った分を`chown -h owner:`、同じディレクトリに`mktemp -d .masuda-write.XXXXXXXX`（root、0700））→ `vm.fs.writeFile(<tmpdir>/f, AsyncIterable)` → `chmod <mode>`・`chown -h owner:`・`mv -f -T`・`rmdir`。失敗時は一時ディレクトリを`rm -rf`
-  - mode 0→0644、0o7777超はInvalidArgument。owner空→default_user。pathは絶対パスのみ（`path.posix.normalize`、`/`やNULはInvalidArgument）
-- `src/service.ts`: `readFile`・`writeFile`。先頭がheaderでない、2通目以降にheaderが来たらInvalidArgument
-- `src/vm.ts`: `GuestVm`に`fs`を追加
+S6（tcp_mapsとSSH）完了。
+- `src/tcpmaps.ts`: `validateTcpMaps`（hostは小文字化・末尾ドット除去、IPやワイルドカード・`:`入りは不可、port 0〜65535、upstreamは`host:port`必須（IPv6は`[::1]:p`）、ホストが`127.0.0.0/8`・`localhost`・`::1`以外ならInvalidArgument、`host`/`host:port`の重複もInvalidArgument）と`toTcpHosts`。`service.ts`の`toRecord`で検証
+- `src/vm.ts`: `VM.create`に`tcp: { hosts }`（tcp_mapsが空なら渡さない）。`GuestVm`に`enableSsh`を追加
+- `src/ssh.ts`: `GuestSsh`（サンドボックスごとに1つ、呼び出しは直列化）
+  - enable(user): 前のアクセスを`close()` → rootのExecでユーザー存在確認（無ければInvalidArgument）、sshdを許可しているユーザーが変わるときだけ`/run/sshd.pid`のsshdを止める → `vm.enableSsh({user, listenHost:"127.0.0.1", listenPort:0})` → `identityFile`を読んで`private_key_pem`、`ssh_argv`は`access.command`と同じ引数（`-i`はGondolinが書いた`/tmp/gondolin-ssh-*/id_ed25519`）
+  - disable(user): 現在のアクセスのユーザーと一致すれば`close()`。一致しない・アクセスなしは何もせず成功
+  - close(): Destroy/shutdown時に`vm.close()`の前に呼ぶ。実行中のenableが後から作ったアクセスも閉じる
+- `src/sandboxes.ts`: `enableSsh`/`disableSsh`（userが空ならdefault_user。DisableSshは存在しないidでNotFound、STOPPEDでも成功）
+- `test/unit/tcpmaps.test.ts`を追加
+- `ssh_egress`は従来どおり保存のみ（S8）
 ## 完了した契約テスト
-C-S1〜C-S5。`node dist/cli.js -- serve --socket $XDG_RUNTIME_DIR/masuda-sandbox-s5.sock`を起動し`MASUDA_SANDBOX_SOCKET=... pnpm test:contract`で5 passed / 2 failed（C-S5は約5秒。C-S6は403 Forbidden、C-S7は`seen`が空。いずれもS6・S7未実装で想定どおり）。`pnpm test`は11 passed
-手動確認（一時テストで実施し削除済み）: 40MiBのランダムデータを書いて読み戻しsha256一致（書き約2.4秒、読み約2.6秒、220チャンク）。新しい親ディレクトリ3段がubuntu:ubuntu 755、ファイルは指定どおり600。一時ディレクトリは残らない。空ファイル（dataなし）は0バイトで書ける。エラー: ディレクトリ→FailedPrecondition、存在しないowner・相対パス・headerなし→InvalidArgument
+C-S1〜C-S6。`node dist/cli.js serve --socket $XDG_RUNTIME_DIR/masuda-sandbox-s6.sock`を起動し`MASUDA_SANDBOX_SOCKET=... pnpm test:contract`で6 passed / 1 failed（C-S6は約5.5秒。C-S7は`expected [] to include 'httpStarted'`でS7未実装により想定どおり）。`pnpm test`は27 passed
+手動確認（scratchpadのスクリプト、リポジトリには残していない）: 非ループバックupstream・ポートなしupstream・存在しないユーザーはInvalidArgument。再EnableSshで鍵が変わり、古い鍵はPermission denied、古いポートは閉じ、古い鍵ファイルは消える。古いアクセス経由の確立済みセッションは再EnableSsh後も生きて完走。ubuntu→root→ubuntuの切り替えでそれぞれログインできる。別ユーザーへのDisableSshは何もしない。DisableSsh後とDestroy後はポートが閉じ鍵ファイルも消える。Destroy後のEnable/DisableはNotFound
 ## 未完と理由
-- S6以降は範囲外
+- S7以降は範囲外
 ## 次の一手
-`docs/work-orders.md`のS6（tcp_mapsとSSH）
+`docs/work-orders.md`のS7（観測）
 ## 注意点
-- **Gondolinのファイル操作はExecと排他**。`server-ops.js`の`waitForExecIdle`が実行中のExecがすべて終わるまで10msごとに待ち、ファイル操作中に来たExecは`execQueue`で開始を待たされる。長時間のExec（timeoutなしで終わらないもの）があるとReadFile/WriteFileは返らない（ctxのsignalで中断はできる）。masudaはclaudeをtmuxで動かすのでExecは短い想定だが、常駐Execを使う設計にするなら問題になる。避けるならファイル転送をExecのstdin/stdoutで実装し直す
-- ReadFileの種別判定と読み込みは別のゲスト操作。間にシンボリックリンクへ差し替えられると辿る（読み込みはroot）。ゲストのroot専用ファイルにホストの秘密は無い（秘密の値はゲストに入らない）ので許容した
-- WriteFileの一時ディレクトリは親ディレクトリ（多くはゲストユーザーが書ける）に置くので、ゲストユーザーは一時ディレクトリ自体をrenameできる。中身はroot 0700で触れない
-- 親ディレクトリの途中にシンボリックリンクがあれば辿る（契約が辿らないと言っているのは最終要素だけと解釈）
-- `vm.fs.*`はGondolinのsandboxd経由でrootとして動く
-- S6で`tcp_maps`を配線するとき: `tcp.hosts`宛はHTTP中継を通らないので`Egress`の判定外（S4からの引き継ぎ）
-- 契約テストは毎回C-S2でイメージを作る。このセッションでGondolin資産`18056cd1-...`が増えた（images.jsonに記録済み。`~/.cache/gondolin/images/objects`は計4.5G）。`b0ac34bd-...`（17:52 JST作成）はこのセッションのものではない
+- **GondolinのsshdはゲストPID 1（sandboxd）が回収しない**。killするとゾンビになり`kill -0`は成功し続ける。`ssh.ts`は`/proc/<pid>/stat`の状態Zを終了とみなしている。ゲスト内で子プロセスを止めて待つ処理を書くときは同じ罠がある
+- Gondolinは1VMにつきSSHアクセスを1つしか持たず、2回目の`vm.enableSsh`はユーザーに関係なく前のアクセスを返す。別ユーザーを同時に有効にはできない（契約上は「同じユーザーへの再呼び出しでローテーション」のみ要求）
+- `vm.enableSsh`は内部で`execFileSync("ssh-keygen")`を使う（短時間なので許容。ssh自体を同期で待つわけではない）
+- アクセスを閉じても確立済みのSSHセッションは切れない（フォワーダが新規接続を止めるだけ）。ゲストのsshdも動き続け、authorized_keysには最後の鍵が残る（秘密鍵はホストのみ）
+- user="root"も受け付ける。制限するなら契約側の判断
+- `tcp.hosts`宛の通信はHTTP中継を通らないので`Egress`の判定外・イベントも出ない（S7でWatchEventsに出したくなっても出せない）。ゲートウェイIP直叩き（192.168.127.1）はGondolinが拒否する
+- サービスを`pkill -f '...cli.js serve...'`で止めようとすると自分のbashコマンドにも一致して殺される。`pgrep -f '^node dist/cli.js serve'`でPIDを取ってkillする
+- `dist/`を作り直したらサービスの再起動が必要（古いコードのまま動いていて手動確認で一度混乱した）
+- 契約テストは毎回C-S2でイメージを作る。このセッションでGondolin資産`23615b4f-...`・`42e68cee-...`が増えた（images.jsonに記録済み。`~/.cache/gondolin/images/objects`は計5.6G）
 - 無関係なQEMU（PID 12244）とGondolin資産`3cd7a864...`・`c4dc6a9f...`は親セッションのもの。触っていない
-- 残したもの: QEMUなし（12244以外）。dockerタグ`masuda-sandbox/image:x86_64-3f14a23ce3f7d022`（S2から継続）と`masuda-sandbox-test:latest`（以前から）。`sandboxes.json`は空。サービスは停止済み
+- 残したもの: QEMUなし（12244以外）。`/tmp/gondolin-ssh-*`なし。dockerタグ`masuda-sandbox/image:x86_64-3f14a23ce3f7d022`（S2から継続）と`masuda-sandbox-test:latest`（以前から）。`sandboxes.json`は空。サービスは停止済み
 ## 契約への提案
 なし
