@@ -1,0 +1,41 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      MASUDA_SANDBOX_VERSION: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # Unit tests only; the contract tests need KVM (see docs/release.md).
+      - run: pnpm test
+      # package.json stays at 0.0.0 in the repository; the tag is the only
+      # place the version is written down, so it is stamped in here.
+      - name: Pack
+        run: |
+          version="${MASUDA_SANDBOX_VERSION#v}"
+          npm pkg set version="$version"
+          npm pack
+          sha256sum "masuda-sandbox-${version}.tgz" > SHA256SUMS
+          cat SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            masuda-sandbox-*.tgz
+            SHA256SUMS
