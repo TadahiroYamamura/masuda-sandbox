@@ -8,6 +8,7 @@ import { gcSessions } from "@earendil-works/gondolin";
 
 import { SandboxService } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
 import { log } from "./log.js";
+import { ImageStore } from "./images.js";
 import { SandboxRegistry } from "./registry.js";
 import { sandboxServiceImpl } from "./service.js";
 
@@ -54,7 +55,7 @@ export async function serve(opts: ServeOptions): Promise<void> {
 
   const registry = new SandboxRegistry();
   const handler = connectNodeAdapter({
-    routes: (router) => router.service(SandboxService, sandboxServiceImpl(registry)),
+    routes: (router) => router.service(SandboxService, sandboxServiceImpl(registry, new ImageStore())),
   });
   const server = http2.createServer(handler);
   const sessions = new Set<http2.ServerHttp2Session>();
