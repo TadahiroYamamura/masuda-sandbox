@@ -6,7 +6,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { buildImage, parseArch } from "./build.js";
-import { runExec } from "./exec.js";
+import { execBaseEnv, parseImageEnv, runExec } from "./exec.js";
 import { readGuestFile, writeGuestFile } from "./files.js";
 import { DestroySandboxResponseSchema, DisableSshResponseSchema, ImageSchema, ListImagesResponseSchema, ListSandboxesResponseSchema, SandboxService, SetPolicyResponseSchema, SshAccessSchema, WriteFileResponseSchema, type CreateSandboxRequest, type Image } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
 import type { ImageRecord, ImageStore } from "./images.js";
@@ -22,10 +22,13 @@ function toImage(r: ImageRecord): Image {
 const DEFAULT_MEMORY_MIB = 4096;
 const DEFAULT_CPUS = 4;
 
-function toRecord(req: CreateSandboxRequest): SandboxRecord {
+function validateCreate(req: CreateSandboxRequest): void {
   if (!req.id) throw new ConnectError("id is required", Code.InvalidArgument);
   if (!req.buildId) throw new ConnectError("build_id is required", Code.InvalidArgument);
   if (!req.defaultUser) throw new ConnectError("default_user is required", Code.InvalidArgument);
+}
+
+function toRecord(req: CreateSandboxRequest, image: ImageRecord): SandboxRecord {
   const e = req.sshEgress;
   return {
     id: req.id,
@@ -34,6 +37,8 @@ function toRecord(req: CreateSandboxRequest): SandboxRecord {
     defaultUser: req.defaultUser,
     memoryMib: req.memoryMib || DEFAULT_MEMORY_MIB,
     cpus: req.cpus || DEFAULT_CPUS,
+    diskMib: req.diskMib,
+    imageEnv: parseImageEnv(image.env ?? []),
     env: { ...req.env },
     policy: { allowedHosts: [...(req.policy?.allowedHosts ?? [])], enabledSecrets: [...(req.policy?.enabledSecrets ?? [])] },
     secretNames: req.secrets.map((s) => s.name),
@@ -63,13 +68,17 @@ export function sandboxServiceImpl(registry: SandboxRegistry, images: ImageStore
             continue;
           }
           if ("reused" in ev) {
-            const rec = await images.get(ev.reused.buildId);
+            let rec = await images.get(ev.reused.buildId);
             if (!rec) throw new ConnectError(`image ${ev.reused.buildId} vanished from images.json during the build`, Code.Internal);
+            if (!rec.env) {
+              rec = { ...rec, env: ev.reused.env };
+              await images.record(rec);
+            }
             log.info("image reused", { ...rec });
             yield { event: { case: "built", value: toImage(rec) } };
             continue;
           }
-          const rec: ImageRecord = { buildId: ev.built.buildId, name: req.name, arch, createdAt: new Date().toISOString(), ociDigest: ev.built.ociDigest };
+          const rec: ImageRecord = { buildId: ev.built.buildId, name: req.name, arch, createdAt: new Date().toISOString(), ociDigest: ev.built.ociDigest, env: ev.built.env };
           await images.record(rec);
           log.info("image built", { ...rec });
           yield { event: { case: "built", value: toImage(rec) } };
@@ -88,9 +97,10 @@ export function sandboxServiceImpl(registry: SandboxRegistry, images: ImageStore
       return create(ListSandboxesResponseSchema, { sandboxes: registry.list() });
     },
     async createSandbox(req) {
-      const record = toRecord(req);
-      const image = await images.get(record.buildId);
-      if (!image) throw new ConnectError(`image ${JSON.stringify(record.buildId)} not found`, Code.NotFound);
+      validateCreate(req);
+      const image = await images.get(req.buildId);
+      if (!image) throw new ConnectError(`image ${JSON.stringify(req.buildId)} not found`, Code.NotFound);
+      const record = toRecord(req, image);
       const imageDir = getImageObjectDirectory(record.buildId);
       const st = await fs.stat(imageDir).catch(() => undefined);
       if (!st?.isDirectory()) throw new ConnectError(`assets for image ${record.buildId} are missing (${imageDir})`, Code.FailedPrecondition);
@@ -117,7 +127,9 @@ export function sandboxServiceImpl(registry: SandboxRegistry, images: ImageStore
       const sb = registry.running(req.id);
       const release = sb.execSlots.acquire();
       try {
-        for await (const ev of runExec(sb.vm, req, sb.record.defaultUser, sb.env, ctx.signal)) yield { event: ev };
+        const user = req.user || sb.record.defaultUser;
+        const baseEnv = execBaseEnv(await sb.home(user, ctx.signal), sb.record.imageEnv, sb.env);
+        for await (const ev of runExec(sb.vm, req, sb.record.defaultUser, baseEnv, ctx.signal)) yield { event: ev };
       } finally {
         release();
       }

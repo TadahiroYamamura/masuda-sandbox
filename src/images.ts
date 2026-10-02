@@ -10,6 +10,9 @@ export interface ImageRecord {
   arch: string;
   createdAt: string; // ISO 8601
   ociDigest: string;
+  // The Docker image's Config.Env ("K=V"). Absent in records written before
+  // S10; BuildImage fills it in when such a record is reused.
+  env?: string[];
 }
 
 interface ImagesFile {

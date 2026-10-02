@@ -9,8 +9,8 @@ export class ProcessError extends Error {}
 // SSH forwarders and HTTP mediation in this same process, so blocking on a
 // child (execFileSync and friends) would stall every live sandbox.
 // Abandoning the iteration (e.g. the RPC was cancelled) kills the child.
-export async function* runLines(cmd: string, args: string[], opts: { cwd?: string; signal?: AbortSignal } = {}): AsyncGenerator<string, void> {
-  const child = spawn(cmd, args, { cwd: opts.cwd, stdio: ["ignore", "pipe", "pipe"], signal: opts.signal });
+export async function* runLines(cmd: string, args: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; signal?: AbortSignal } = {}): AsyncGenerator<string, void> {
+  const child = spawn(cmd, args, { cwd: opts.cwd, env: opts.env, stdio: ["ignore", "pipe", "pipe"], signal: opts.signal });
   const pending: string[] = [];
   let finished: { code: number | null; signal: NodeJS.Signals | null } | { error: Error } | undefined;
   let wake: (() => void) | undefined;

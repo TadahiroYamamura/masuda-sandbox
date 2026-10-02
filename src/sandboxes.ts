@@ -7,7 +7,7 @@ import { dataDir, readJsonFile, writeJsonFile } from "./datafile.js";
 import { Egress, validatePolicy } from "./egress.js";
 import { EventQueue } from "./events.js";
 import { PolicySchema, SandboxSchema, SandboxState, type Sandbox, type SandboxEvent, type SecretDecl } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
-import { ExecSlots } from "./exec.js";
+import { ExecSlots, lookupHome } from "./exec.js";
 import { log } from "./log.js";
 import { GuestSsh, type SshInfo } from "./ssh.js";
 import { bootVm, type GuestVm } from "./vm.js";
@@ -39,6 +39,10 @@ export interface SandboxRecord {
   defaultUser: string;
   memoryMib: number;
   cpus: number;
+  // 0 = Gondolin's default size. Absent in records written before S10.
+  diskMib?: number;
+  // The image's ENV at creation; see execBaseEnv for where it sits.
+  imageEnv?: Record<string, string>;
   env: Record<string, string>;
   policy: PolicyRecord;
   secretNames: string[];
@@ -58,6 +62,8 @@ interface Entry {
   egress?: Egress;
   events: EventQueue;
   execSlots: ExecSlots;
+  // Guest home directories by user, filled on first Exec as that user.
+  homes: Map<string, string>;
   vm?: GuestVm;
   ssh?: GuestSsh;
   monitor?: NodeJS.Timeout;
@@ -71,8 +77,9 @@ export interface RunningSandbox {
   record: SandboxRecord;
   vm: GuestVm;
   execSlots: ExecSlots;
-  // record.env plus the secret placeholders; what every Exec starts from.
+  // record.env plus the secret placeholders.
   env: Record<string, string>;
+  home(user: string, signal?: AbortSignal): Promise<string | undefined>;
 }
 
 export function defaultSandboxesPath(): string {
@@ -92,7 +99,7 @@ export class SandboxRegistry {
     for (const record of Array.isArray(parsed?.sandboxes) ? parsed.sandboxes : []) {
       const events = new EventQueue();
       events.close();
-      this.entries.set(record.id, { record, state: SandboxState.STOPPED, failure: "", events, execSlots: new ExecSlots(), ready: Promise.resolve(), destroyed: false });
+      this.entries.set(record.id, { record, state: SandboxState.STOPPED, failure: "", events, execSlots: new ExecSlots(), homes: new Map(), ready: Promise.resolve(), destroyed: false });
     }
   }
 
@@ -119,7 +126,17 @@ export class SandboxRegistry {
 
   running(id: string): RunningSandbox {
     const e = this.runningEntry(id);
-    return { record: e.record, vm: e.vm!, execSlots: e.execSlots, env: guestEnv(e) };
+    const vm = e.vm!;
+    // Only found homes are cached: a user created by a later Exec must not
+    // stay homeless for the life of the sandbox.
+    const home = async (user: string, signal?: AbortSignal) => {
+      const cached = e.homes.get(user);
+      if (cached) return cached;
+      const found = await lookupHome(vm, user, signal);
+      if (found) e.homes.set(user, found);
+      return found;
+    };
+    return { record: e.record, vm, execSlots: e.execSlots, env: guestEnv(e), home };
   }
 
   private runningEntry(id: string): Entry {
@@ -143,7 +160,7 @@ export class SandboxRegistry {
     const egress = new Egress(secrets, record.policy, events);
     record.policy = egress.currentPolicy;
     let settle!: () => void;
-    const entry: Entry = { record, state: SandboxState.STARTING, failure: "", egress, events, execSlots: new ExecSlots(), ready: new Promise((r) => (settle = r)), destroyed: false };
+    const entry: Entry = { record, state: SandboxState.STARTING, failure: "", egress, events, execSlots: new ExecSlots(), homes: new Map(), ready: new Promise((r) => (settle = r)), destroyed: false };
     this.entries.set(record.id, entry);
     setState(entry, SandboxState.STARTING, "");
     try {

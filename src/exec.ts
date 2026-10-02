@@ -75,6 +75,55 @@ export function guestArgv(spec: ExecSpec, defaultUser: string, baseEnv: Record<s
   return ["/bin/sh", "-c", 'exec "$@"', "masuda-exec", ...out];
 }
 
+const SYSTEM_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+
+// What an Exec gets before the image's ENV and the request's env. Without it
+// the guest falls back to Gondolin's init environment (HOME=/root,
+// XDG_*=/tmp/.cache etc. owned by root, PATH without /usr/local/bin), which a
+// non-root user cannot write to. An unknown home (the user does not exist)
+// leaves only PATH: runuser then reports the missing user itself.
+export function serviceDefaultEnv(home: string | undefined): Record<string, string> {
+  if (!home) return { PATH: SYSTEM_PATH };
+  return {
+    HOME: home,
+    XDG_CACHE_HOME: `${home}/.cache`,
+    XDG_CONFIG_HOME: `${home}/.config`,
+    XDG_DATA_HOME: `${home}/.local/share`,
+    PATH: `${home}/.local/bin:${SYSTEM_PATH}`,
+  };
+}
+
+// The image's ENV overrides the service defaults (an image that sets PATH has
+// its PATH respected) and is overridden by CreateSandbox.env; Exec.env is
+// applied on top of the result in guestArgv.
+export function execBaseEnv(home: string | undefined, imageEnv: Record<string, string> | undefined, sandboxEnv: Record<string, string>): Record<string, string> {
+  return { ...serviceDefaultEnv(home), ...imageEnv, ...sandboxEnv };
+}
+
+// Docker's Config.Env entries ("K=V"). Names env(1) cannot take are dropped
+// rather than failing every Exec of the sandbox.
+export function parseImageEnv(entries: readonly string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const e of entries) {
+    const i = e.indexOf("=");
+    if (i <= 0) continue;
+    const k = e.slice(0, i);
+    if (ENV_NAME.test(k)) out[k] = e.slice(i + 1);
+  }
+  return out;
+}
+
+// getent covers NSS sources other than /etc/passwd; the awk fallback is for
+// images without getent.
+const LOOKUP_HOME = `getent passwd "$1" 2>/dev/null | cut -d: -f6 || true
+awk -F: -v u="$1" '$1 == u { print $6; exit }' /etc/passwd 2>/dev/null`;
+
+export async function lookupHome(vm: GuestVm, user: string, signal?: AbortSignal): Promise<string | undefined> {
+  if (!USER_NAME.test(user)) return undefined;
+  const r = await vm.exec(["/bin/sh", "-c", LOOKUP_HOME, "masuda-home", user], { signal });
+  return r.stdout.split("\n").map((l) => l.trim()).find((l) => l.startsWith("/"));
+}
+
 export const MAX_CONCURRENT_EXECS = 8;
 
 // Caps how many Execs one sandbox runs at once. Gondolin multiplexes them over

@@ -18,10 +18,11 @@ export interface BuildRequest {
   reusable?: (ociDigest: string) => Promise<string | undefined>;
 }
 
+// env is the image's Config.Env ("K=V" entries), which Exec starts from.
 export type BuildEvent =
   | { log: string }
-  | { built: { buildId: string; ociDigest: string } }
-  | { reused: { buildId: string; ociDigest: string } };
+  | { built: { buildId: string; ociDigest: string; env: string[] } }
+  | { reused: { buildId: string; ociDigest: string; env: string[] } };
 
 export function hostArch(): Arch {
   return process.arch === "arm64" ? "aarch64" : "x86_64";
@@ -34,13 +35,29 @@ export function parseArch(s: string): Arch | undefined {
 
 const dockerPlatform: Record<Arch, string> = { x86_64: "linux/amd64", aarch64: "linux/arm64" };
 
-// The CLI is run as a child instead of calling buildAssets() and
+// The build runs in a child instead of calling buildAssets() and
 // importImageFromDirectory() in-process: both use execFileSync and synchronous
 // fs copies of the multi-GB rootfs, which would freeze the event loop shared
-// with running sandboxes.
-function gondolinBin(): string {
-  const index = fileURLToPath(import.meta.resolve("@earendil-works/gondolin"));
-  return path.resolve(path.dirname(index), "..", "bin", "gondolin.js");
+// with running sandboxes. Why the child is our own script rather than the
+// gondolin CLI is in gondolin-build.ts.
+const buildChild = fileURLToPath(new URL("./gondolin-build.js", import.meta.url));
+
+async function imageEnv(ociDigest: string, signal?: AbortSignal): Promise<string[]> {
+  let out = "";
+  for await (const l of runLines("docker", ["image", "inspect", "--format", "{{json .Config.Env}}", ociDigest], { signal })) out += l;
+  const parsed: unknown = JSON.parse(out);
+  return Array.isArray(parsed) ? parsed.filter((e): e is string => typeof e === "string") : [];
+}
+
+// The extracted rootfs may hold directories without the owner's write bit,
+// which a plain recursive rm cannot empty.
+async function removeTree(dir: string): Promise<void> {
+  try {
+    for await (const _ of runLines("chmod", ["-R", "u+w", dir])) void _;
+  } catch {
+    // Best effort: the rm below reports what is still in the way.
+  }
+  await fs.rm(dir, { recursive: true, force: true });
 }
 
 export async function* buildImage(req: BuildRequest): AsyncGenerator<BuildEvent, void> {
@@ -59,11 +76,12 @@ export async function* buildImage(req: BuildRequest): AsyncGenerator<BuildEvent,
       yield { log: l };
     }
     const ociDigest = (await fs.readFile(iidFile, "utf8")).trim();
+    const env = await imageEnv(ociDigest, req.signal);
 
     const existing = await req.reusable?.(ociDigest);
     if (existing) {
       yield { log: `==> reusing existing gondolin assets ${existing} for ${ociDigest} (gondolin build skipped)` };
-      yield { reused: { buildId: existing, ociDigest } };
+      yield { reused: { buildId: existing, ociDigest, env } };
       return;
     }
 
@@ -86,14 +104,17 @@ export async function* buildImage(req: BuildRequest): AsyncGenerator<BuildEvent,
 
     yield { log: `==> gondolin build (${tag})` };
     let buildId: string | undefined;
-    for await (const l of runLines(process.execPath, [gondolinBin(), "build", "--config", configPath], { signal: req.signal })) {
+    // TMPDIR keeps any other temporary files Gondolin makes inside tmp too.
+    const childEnv = { ...process.env, TMPDIR: tmp };
+    const args = [buildChild, configPath, path.join(tmp, "work"), path.join(tmp, "out")];
+    for await (const l of runLines(process.execPath, args, { signal: req.signal, env: childEnv })) {
       const m = /^\s*Build ID:\s*(\S+)\s*$/.exec(l);
       if (m) buildId = m[1];
       yield { log: l };
     }
     if (!buildId) throw new Error("gondolin build succeeded but printed no build id");
-    yield { built: { buildId, ociDigest } };
+    yield { built: { buildId, ociDigest, env } };
   } finally {
-    await fs.rm(tmp, { recursive: true, force: true });
+    await removeTree(tmp);
   }
 }
