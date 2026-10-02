@@ -13,6 +13,7 @@ import type { ImageRecord, ImageStore } from "./images.js";
 import { log } from "./log.js";
 import { ProcessError } from "./proc.js";
 import type { SandboxRecord, SandboxRegistry } from "./sandboxes.js";
+import { serverInfo } from "./serverinfo.js";
 import { validateTcpMaps } from "./tcpmaps.js";
 
 function toImage(r: ImageRecord): Image {
@@ -51,6 +52,10 @@ function toRecord(req: CreateSandboxRequest, image: ImageRecord): SandboxRecord 
 // the Connect router.
 export function sandboxServiceImpl(registry: SandboxRegistry, images: ImageStore): Partial<ServiceImpl<typeof SandboxService>> {
   return {
+    getServerInfo() {
+      return serverInfo();
+    },
+
     async *buildImage(req, ctx) {
       const arch = parseArch(req.arch);
       if (!arch) throw new ConnectError(`unsupported arch ${JSON.stringify(req.arch)}`, Code.InvalidArgument);

@@ -2,3 +2,5 @@ node_modules/
 dist/
 .env
 *.qcow2
+src/version.ts
+*.tgz

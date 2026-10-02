@@ -5,8 +5,9 @@ import { ImageStore } from "./images.js";
 import { log } from "./log.js";
 import { applyPrune, formatBytes, planPrune } from "./prune.js";
 import { serve } from "./server.js";
+import { VERSION } from "./version.js";
 
-const usage = "usage: masuda-sandbox serve --socket <path>\n       masuda-sandbox images prune [--dry-run]";
+const usage = "usage: masuda-sandbox serve --socket <path>\n       masuda-sandbox images prune [--dry-run]\n       masuda-sandbox --version";
 
 async function imagesPrune(dryRun: boolean): Promise<void> {
   const images = new ImageStore();
@@ -26,6 +27,9 @@ async function main(argv: string[]): Promise<void> {
   const args = argv[0] === "--" ? argv.slice(1) : argv;
   const [command, ...rest] = args;
   switch (command) {
+    case "--version":
+      process.stdout.write(`${VERSION}\n`);
+      return;
     case "serve": {
       const { values } = parseArgs({ args: rest, options: { socket: { type: "string" } }, strict: true });
       if (!values.socket) throw new Error(`--socket is required\n${usage}`);
