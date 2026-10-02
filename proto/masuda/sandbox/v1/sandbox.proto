@@ -296,7 +296,8 @@ message WriteFileResponse { uint64 bytes_written = 1; }
 
 message WatchEventsRequest {
   string id = 1;
-  // Replay events after this sequence number first (0 = only new events).
+  // Replay buffered events after this sequence number first, then go live.
+  // 0 replays everything still buffered (the service keeps the last 1000).
   uint64 after_seq = 2;
 }
 
