@@ -1,6 +1,6 @@
-import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
+
+import { dataDir, readJsonFile, writeJsonFile } from "./datafile.js";
 
 export interface ImageRecord {
   buildId: string;
@@ -15,8 +15,7 @@ interface ImagesFile {
 }
 
 export function defaultImagesPath(): string {
-  const base = process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
-  return path.join(base, "masuda-sandbox", "images.json");
+  return path.join(dataDir(), "images.json");
 }
 
 export class ImageStore {
@@ -49,21 +48,11 @@ export class ImageStore {
   }
 
   private async read(): Promise<ImagesFile> {
-    let raw: string;
-    try {
-      raw = await fs.readFile(this.file, "utf8");
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") return { images: [] };
-      throw e;
-    }
-    const parsed = JSON.parse(raw) as Partial<ImagesFile>;
-    return { images: Array.isArray(parsed.images) ? parsed.images : [] };
+    const parsed = await readJsonFile<Partial<ImagesFile>>(this.file);
+    return { images: Array.isArray(parsed?.images) ? parsed.images : [] };
   }
 
-  private async write(data: ImagesFile): Promise<void> {
-    await fs.mkdir(path.dirname(this.file), { recursive: true });
-    const tmp = `${this.file}.${process.pid}.tmp`;
-    await fs.writeFile(tmp, JSON.stringify(data, null, 2) + "\n");
-    await fs.rename(tmp, this.file);
+  private write(data: ImagesFile): Promise<void> {
+    return writeJsonFile(this.file, data);
   }
 }

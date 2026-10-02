@@ -9,7 +9,7 @@ import { gcSessions } from "@earendil-works/gondolin";
 import { SandboxService } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
 import { log } from "./log.js";
 import { ImageStore } from "./images.js";
-import { SandboxRegistry } from "./registry.js";
+import { SandboxRegistry } from "./sandboxes.js";
 import { sandboxServiceImpl } from "./service.js";
 
 export interface ServeOptions {
@@ -54,6 +54,7 @@ export async function serve(opts: ServeOptions): Promise<void> {
   await clearStaleSocket(socketPath);
 
   const registry = new SandboxRegistry();
+  await registry.load();
   const handler = connectNodeAdapter({
     routes: (router) => router.service(SandboxService, sandboxServiceImpl(registry, new ImageStore())),
   });
@@ -82,8 +83,8 @@ export async function serve(opts: ServeOptions): Promise<void> {
     log.info("shutting down", { signal });
     server.close();
     for (const s of sessions) s.close();
-    const failures = await registry.destroyAll();
-    for (const f of failures) log.error("destroy failed during shutdown", { id: f.id, error: f.error });
+    const failures = await registry.shutdown();
+    for (const f of failures) log.error("closing a VM failed during shutdown", { id: f.id, error: f.error });
     await fs.unlink(socketPath).catch(() => {});
     log.info("stopped");
     process.exit(failures.length ? 1 : 0);
