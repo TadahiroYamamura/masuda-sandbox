@@ -1,0 +1,331 @@
+// sandbox API: the only way anything outside masuda-sandbox talks to a VM.
+//
+// Owned by masuda-sandbox. Consumers (masuda) generate clients from this file.
+// Implementers must not change this file; propose changes via HANDOFF.md
+// (see docs/design/contracts.md in the masuda repository).
+//
+// Served over Connect (h2c) on a Unix domain socket. No authentication: every
+// process of the same host account is trusted.
+syntax = "proto3";
+
+package masuda.sandbox.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/TadahiroYamamura/masuda-sandbox/gen/masuda/sandbox/v1;sandboxv1";
+
+service SandboxService {
+  // ---- images -------------------------------------------------------------
+
+  // Builds a guest image from a directory holding a Dockerfile. The service
+  // runs `docker build`, then converts the OCI image to Gondolin assets. The
+  // stream carries build log lines and ends with a Built event.
+  rpc BuildImage(BuildImageRequest) returns (stream BuildImageEvent);
+  rpc ListImages(ListImagesRequest) returns (ListImagesResponse);
+
+  // ---- lifecycle ----------------------------------------------------------
+
+  // Creates and boots a VM. Returns once the guest accepts Exec. The id is
+  // chosen by the caller (masuda uses the workspace id) and must be unique
+  // among live sandboxes.
+  rpc CreateSandbox(CreateSandboxRequest) returns (Sandbox);
+  rpc GetSandbox(GetSandboxRequest) returns (Sandbox);
+  rpc ListSandboxes(ListSandboxesRequest) returns (ListSandboxesResponse);
+  // Stops the VM and releases everything it held. Idempotent.
+  rpc DestroySandbox(DestroySandboxRequest) returns (DestroySandboxResponse);
+
+  // ---- policy -------------------------------------------------------------
+
+  // Replaces the sandbox's active egress policy: which hosts the guest may
+  // reach over HTTP/TLS, and which of the secrets declared at creation are
+  // substituted. Takes effect for the next connection; existing connections
+  // are not cut. Called by masuda on every node entry.
+  rpc SetPolicy(SetPolicyRequest) returns (SetPolicyResponse);
+
+  // ---- execution ----------------------------------------------------------
+
+  // Runs one command in the guest and streams its output. The stream ends
+  // with an Exited event. Non-zero exit codes are not errors.
+  rpc Exec(ExecRequest) returns (stream ExecEvent);
+  // Starts sshd in the guest (loopback only) and a host-local forwarder, and
+  // returns how to connect. Used by `masuda chat`. Idempotent per user.
+  rpc EnableSsh(EnableSshRequest) returns (SshAccess);
+  rpc DisableSsh(DisableSshRequest) returns (DisableSshResponse);
+
+  // ---- files --------------------------------------------------------------
+
+  // Reads one regular file from the guest filesystem. Symlinks are not
+  // followed (NotFound). The caller validates the content; the service does
+  // not interpret it.
+  rpc ReadFile(ReadFileRequest) returns (stream FileChunk);
+  // Writes one regular file into the guest. The first message is the header;
+  // the rest carry data. Parent directories are created. An existing symlink
+  // at the path is replaced, never followed.
+  rpc WriteFile(stream WriteFileRequest) returns (WriteFileResponse);
+
+  // ---- observation --------------------------------------------------------
+
+  // Streams what the host observes about the sandbox: every HTTP request the
+  // guest makes through the policy layer (start, finish, denial) and VM state
+  // changes. This is the activity signal the guest cannot fake.
+  rpc WatchEvents(WatchEventsRequest) returns (stream SandboxEvent);
+}
+
+// ---- images -----------------------------------------------------------------
+
+message BuildImageRequest {
+  // Host directory containing the Dockerfile; the build context.
+  string context_dir = 1;
+  // Dockerfile path relative to context_dir. Default "Dockerfile".
+  string dockerfile = 2;
+  // Human-readable name recorded on the image (e.g. "<repo>:default").
+  string name = 3;
+  // "x86_64" or "aarch64". Default: host architecture.
+  string arch = 4;
+}
+
+message BuildImageEvent {
+  oneof event {
+    string log_line = 1;
+    Image built = 2;
+  }
+}
+
+message Image {
+  // Gondolin build id; what CreateSandbox refers to.
+  string build_id = 1;
+  string name = 2;
+  string arch = 3;
+  google.protobuf.Timestamp created_at = 4;
+  // Digest of the OCI image the assets were built from.
+  string oci_digest = 5;
+}
+
+message ListImagesRequest {}
+message ListImagesResponse { repeated Image images = 1; }
+
+// ---- lifecycle ----------------------------------------------------------------
+
+message CreateSandboxRequest {
+  string id = 1;
+  string build_id = 2;
+  uint32 memory_mib = 3;  // default 4096
+  uint32 cpus = 4;        // default 4
+  // Guest user that Exec runs as when ExecRequest.user is empty. Must exist in
+  // the image. masuda uses "ubuntu".
+  string default_user = 5;
+  // Environment for every Exec (plaintext; never put real secrets here).
+  map<string, string> env = 6;
+  // All secrets the sandbox will ever be allowed to use. Values stay on the
+  // host; the guest sees placeholders (returned in Sandbox.placeholders).
+  // SetPolicy later enables a subset by name.
+  repeated SecretDecl secrets = 7;
+  // Initial policy. Usually empty allowed_hosts and no enabled secrets.
+  Policy policy = 8;
+  // Synthetic hostnames the guest can reach, mapped to host-local listeners
+  // (raw TCP, no HTTP mediation). masuda maps "masuda.internal" to the
+  // workspace's MCP port. The upstream must be loopback.
+  repeated TcpMap tcp_maps = 9;
+  // Optional outbound SSH egress (git over ssh). Proxied by the host; the
+  // guest never holds the key.
+  SshEgress ssh_egress = 10;
+}
+
+message SecretDecl {
+  // Name as the guest will see it: the env var that holds the placeholder.
+  string name = 1;
+  string value = 2;
+  // Hosts (wildcards allowed) the real value may be sent to.
+  repeated string hosts = 3;
+  // Where placeholders are substituted. Default: [HEADER].
+  repeated SubstituteIn substitute_in = 4;
+  // Optional shape for the placeholder (clients validate token formats).
+  string placeholder_prefix = 5;
+  uint32 placeholder_length = 6;
+}
+
+enum SubstituteIn {
+  SUBSTITUTE_IN_UNSPECIFIED = 0;
+  SUBSTITUTE_IN_HEADER = 1;
+  SUBSTITUTE_IN_BODY = 2;
+}
+
+message Policy {
+  // Hosts the guest may reach over HTTP/TLS. Empty: nothing but what the
+  // service itself always allows (none). Wildcards: "*.example.com".
+  repeated string allowed_hosts = 1;
+  // Names from CreateSandboxRequest.secrets that are substituted now.
+  repeated string enabled_secrets = 2;
+}
+
+message TcpMap {
+  string host = 1;      // e.g. "masuda.internal"
+  uint32 port = 2;      // 0 = all ports
+  string upstream = 3;  // "127.0.0.1:39301"
+}
+
+message SshEgress {
+  repeated string allowed_hosts = 1;  // "github.com", "ssh.example.com:443"
+  // Path to the host ssh-agent socket; empty uses SSH_AUTH_SOCK of the service.
+  string agent_socket = 2;
+  string known_hosts_file = 3;
+  // Git refs the guest may push (glob). Empty: pushes are denied.
+  repeated string push_allowed_refs = 4;
+}
+
+message Sandbox {
+  string id = 1;
+  SandboxState state = 2;
+  string build_id = 3;
+  google.protobuf.Timestamp created_at = 4;
+  // Secret name -> placeholder the guest sees. Stable for the sandbox's life.
+  map<string, string> placeholders = 5;
+  Policy policy = 6;
+  // Host-observed activity, for pollers that do not WatchEvents.
+  google.protobuf.Timestamp last_http_activity = 7;
+  uint32 inflight_http_requests = 8;
+  // Why the sandbox is FAILED, if it is.
+  string failure = 9;
+}
+
+enum SandboxState {
+  SANDBOX_STATE_UNSPECIFIED = 0;
+  SANDBOX_STATE_STARTING = 1;
+  SANDBOX_STATE_RUNNING = 2;
+  SANDBOX_STATE_STOPPED = 3;
+  SANDBOX_STATE_FAILED = 4;
+}
+
+message GetSandboxRequest { string id = 1; }
+message ListSandboxesRequest {}
+message ListSandboxesResponse { repeated Sandbox sandboxes = 1; }
+message DestroySandboxRequest { string id = 1; }
+message DestroySandboxResponse {}
+
+// ---- policy ---------------------------------------------------------------
+
+message SetPolicyRequest {
+  string id = 1;
+  Policy policy = 2;
+}
+message SetPolicyResponse {}
+
+// ---- execution ------------------------------------------------------------
+
+message ExecRequest {
+  string id = 1;
+  // Exactly one of argv / shell. argv[0] must be an absolute path (no PATH
+  // search). shell runs via `/bin/sh -lc`.
+  repeated string argv = 2;
+  string shell = 3;
+  // Guest user; empty = CreateSandboxRequest.default_user. "root" is allowed
+  // and is how privileged sandboxes run.
+  string user = 4;
+  string cwd = 5;
+  map<string, string> env = 6;
+  // Fed to the process's stdin, then stdin is closed. Not for interactive use.
+  bytes stdin = 7;
+  // Allocate a pty (output is then a single merged stream on stdout).
+  bool pty = 8;
+  // 0 = no timeout. On timeout the process is killed and Exited.timed_out set.
+  uint32 timeout_ms = 9;
+}
+
+message ExecEvent {
+  oneof event {
+    Started started = 1;
+    bytes stdout = 2;
+    bytes stderr = 3;
+    Exited exited = 4;
+  }
+  message Started {}
+  message Exited {
+    int32 exit_code = 1;
+    string signal = 2;
+    bool timed_out = 3;
+  }
+}
+
+message EnableSshRequest {
+  string id = 1;
+  string user = 2;  // empty = default_user
+}
+
+message SshAccess {
+  string host = 1;  // "127.0.0.1"
+  uint32 port = 2;
+  string user = 3;
+  // PEM private key for this access; the caller stores it (0600) where it
+  // wants. Rotates on every EnableSsh.
+  bytes private_key_pem = 4;
+  // Ready-to-run ssh argv (without a remote command), using a key file the
+  // service wrote; convenience for CLIs.
+  repeated string ssh_argv = 5;
+}
+
+message DisableSshRequest { string id = 1; string user = 2; }
+message DisableSshResponse {}
+
+// ---- files ----------------------------------------------------------------
+
+message ReadFileRequest {
+  string id = 1;
+  string path = 2;  // absolute guest path
+  // Refuse files larger than this (0 = service default, 64 MiB).
+  uint64 max_bytes = 3;
+}
+
+message FileChunk { bytes data = 1; }
+
+message WriteFileRequest {
+  oneof msg {
+    Header header = 1;
+    bytes data = 2;
+  }
+  message Header {
+    string id = 1;
+    string path = 2;
+    uint32 mode = 3;   // e.g. 0644; 0 = 0644
+    string owner = 4;  // guest user; empty = default_user
+  }
+}
+
+message WriteFileResponse { uint64 bytes_written = 1; }
+
+// ---- observation ----------------------------------------------------------
+
+message WatchEventsRequest {
+  string id = 1;
+  // Replay events after this sequence number first (0 = only new events).
+  uint64 after_seq = 2;
+}
+
+message SandboxEvent {
+  uint64 seq = 1;
+  google.protobuf.Timestamp time = 2;
+  oneof event {
+    HttpRequestStarted http_started = 3;
+    HttpRequestFinished http_finished = 4;
+    HttpRequestDenied http_denied = 5;
+    StateChanged state_changed = 6;
+  }
+  message HttpRequestStarted {
+    uint64 request_id = 1;
+    string method = 2;
+    string host = 3;
+    string path = 4;  // no query string; never headers or bodies
+  }
+  message HttpRequestFinished {
+    uint64 request_id = 1;
+    uint32 status = 2;
+    uint32 duration_ms = 3;
+  }
+  message HttpRequestDenied {
+    string host = 1;
+    string reason = 2;  // "host-not-allowed", "secret-not-enabled", "protocol"
+  }
+  message StateChanged {
+    SandboxState state = 1;
+    string detail = 2;
+  }
+}

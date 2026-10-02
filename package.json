@@ -1,0 +1,27 @@
+{
+  "name": "masuda-sandbox",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.19.0" },
+  "bin": { "masuda-sandbox": "./dist/cli.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "generate": "buf generate",
+    "start": "node dist/cli.js",
+    "test": "vitest run --exclude test/contract",
+    "test:contract": "vitest run test/contract"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2",
+    "@connectrpc/connect": "^2",
+    "@connectrpc/connect-node": "^2",
+    "@earendil-works/gondolin": "^0.12.0"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "^1",
+    "typescript": "^5",
+    "vitest": "^3",
+    "tsx": "^4"
+  }
+}
