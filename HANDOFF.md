@@ -1,36 +1,33 @@
 # HANDOFF
 ## 作業項目
-S12（レスポンスのストリーミングを取り戻す＋PATHの約束）完了。実装コミット`42cfd28`。S8（SSH egress）は指示により手を付けていない。
-- **ストリーミング**: `createHttpHooks`に`onResponse`を渡すのをやめた（`Egress.httpHooks.onResponse`は`undefined`）。Gondolinは`canStream = Boolean(body) && !httpHooks.onResponse`で応答をストリームする
-- **statusの読み方**（`src/netwatch.ts`の`watchResponses`、`src/egress.ts`の`GuestConnections`）: ゲストへ書かれる**平文**の応答ヘッドのステータス行を読む
-  - 平文HTTP: Gondolinは`backend.stack.handleTcpData({key,data})`へ直接書く。このメソッドをstackインスタンス上で包み、`tcpSessions.get(key).protocol === "http"`のときだけ読む（TLSの暗号文も同じ口を通るため）。stackは`resetStack()`で作り直されるので、`handleTcpConnect`のたびに現在のstackを未包装なら包む（WeakSet）
-  - HTTPS（MITM）: Gondolinは平文を`session.tls.socket.write(chunk)`（サーバー側`tls.TLSSocket`）へ書く。`ensureTlsSession`を包み、作られた直後のTLSSocketの`write`をインスタンス上で包む。書き込み先は作成時点の接続オブジェクトに束縛（`GuestConnections.sink`）し、キーが再利用されても遅れた書き込みを新しい接続のものと取り違えない
-  - **上流の応答かどうかの判定**: バイト列だけでは上流の502と、上流fetch失敗時にGondolinが自分で書く`respondWithError`の502を区別できない（S11の契約では後者は0）。Gondolinが最終応答を得たときに出すnetのdebugログ`http bridge response <status> ...`（リダイレクトのhopでは出ない）を`Egress.onDebug`で受け、接続のAsyncLocalStorage文脈（S11）からそのhopに「上流が応答した」印を付ける。印の後に書かれた最初の最終応答ヘッド（1xxは読み飛ばす）のステータスを採る。印が無いhopは0
-  - 完了はS11どおり接続のクローズ（`handleTcpClose`/`abortTcpSession`）で、`duration_ms`もそこで確定。次のhopの`onRequest`（リダイレクト）では前のhopを0で終える（従来どおり）
-  - 劣化: `tcpSessions`/`ensureTlsSession`/`stack.handleTcpData`が無ければ警告して、接続のクローズで`status: 0`。接続追跡の4メソッドごと無ければ（`watchConnections`が`false`）、`vm.ts`が`Egress.useResponseHook()`で`onResponse`を付け直してS11前のメソッド+URLの対応付けに戻す（この場合はストリームしない）。「ステータス不明で0」に落とせるのは接続追跡が生きているときだけで、それも無いと終わりを知る手段が`onResponse`しか無いため
-- **PATH**: `execBaseEnv`で、サービス既定・イメージENV・CreateSandbox.envを重ねた結果のPATHの先頭に`$HOME/.local/bin`を足す（既に先頭なら足さない、空なら`$HOME/.local/bin`だけ、HOME不明なら足さない）。Exec.envのPATHは従来どおりそのまま上書き（契約の「Overrides, applied last」）
-### 実機確認（scratchpadのスクリプト、リポジトリには残していない）
-許可ホストに`httpbin.org`等を入れたサンドボックス（contract:test）でExecし、`WatchEvents`を見た。
-- `curl -sN -w '\nstarttransfer=%{time_starttransfer} total=%{time_total}\n' 'https://httpbin.org/drip?duration=5&numbytes=5'` → `starttransfer=0.848607 total=4.848824`。`*`が約1秒おきに1つずつExecのstdoutに届いた。`httpFinished{status:200, durationMs:4829}`は最後のバイトの後
-- `curl -sN https://httpbin.org/stream/3` も逐次届く
-- `curl -sS -m 1 https://httpbin.org/delay/10` → curl rc=28、`httpFinished{status:0, durationMs:985}`。上流の応答後も2つ目は出ない
-- `https://httpbin.org/status/418` → 418、`http://httpbin.org/status/418`（平文）→ 418
-- `curl -L https://httpbin.org/redirect/2` → `/redirect/2`と`/relative-redirect/1`が`status:0`、`/get`が`status:200`
-- `https://nonexistent.invalid/`（ゲストは502）→ `status:0`、`https://expired.badssl.com/`（ゲストは502）→ `status:0`
-- すべての後で`inflightHttpRequests: 0`。ゲストの`echo $PATH`（ubuntu）→ `/home/ubuntu/.local/bin:/usr/local/sbin:...`
+S13（配布、v0.1.0に向けて）完了。実装コミット`4725663`（GetServerInfo・--version・esbuild）と`63639bc`（CI・release・README・docs/release.md）。S8（SSH egress）は指示により手を付けていない。
+- **GetServerInfo**（`src/serverinfo.ts`、`service.ts`の`getServerInfo`）: `version`と`contract_sha256`は`scripts/gen-version.mjs`がビルド時に`src/version.ts`（gitignore）へ書く。versionは`MASUDA_SANDBOX_VERSION`（先頭`v`は落とす）→HEADのタグ`v*`→`dev`の順。`contract`は生成コードの`file_masuda_sandbox_v1_sandbox.proto.package`。`gondolin_version`は実行時に`@earendil-works/gondolin/package.json`を`createRequire`で読む（束ねていないので、利用者側で解決された版を返す。読めなければ`unknown`）。`platform`はGOARCHの綴り（`x64`→`amd64`）。単体テスト`test/unit/serverinfo.test.ts`
+- **`masuda-sandbox --version`**: `VERSION`を出す
+- **ビルド**: `pnpm build` = gen-version → `tsc --noEmit`（型検査のみ） → `scripts/bundle.mjs`（dist/を消してからesbuildで`dist/cli.js`1ファイル＋map。`@earendil-works/gondolin`だけexternal。ESM出力でCJSの`require`が動くようbannerで`createRequire`）。`pnpm test`も先頭でgen-versionを回す。束ねたConnect/protobufは`devDependencies`へ移し、`dependencies`はGondolinだけ。`files`は`dist/cli.js`・map・README
+- **配布**: `package.json`の`version`は`0.0.0`のまま。release.ymlが`npm pkg set version=<タグ>`してから`npm pack`。手順は`docs/release.md`、利用者向けは`README.md`
+- **ワークフロー**: `.github/workflows/ci.yml`（main/developのpushとPR、install→build→test）、`.github/workflows/release.yml`（タグ`v*`、`MASUDA_SANDBOX_VERSION`=タグ名、install→build→test→pack→`SHA256SUMS`→`softprops/action-gh-release@v2`）。pnpmは`pnpm/action-setup@v4`で11.9.0、Nodeは22
 ## 完了した契約テスト
-C-S1〜C-S7すべて緑（S8は未着手）。`node dist/cli.js serve --socket $XDG_RUNTIME_DIR/masuda-sandbox-s12.sock`に対し`pnpm test:contract`を2回（手動確認の前後）、いずれも7 passed（約30秒・約26秒）。`pnpm test`は55 passed（egress 16件、netwatch 4件、exec 12件ほか）
+C-S1〜C-S7すべて緑（S8は未着手）。
+- `node dist/cli.js serve`（束ねたdev版）に対し`pnpm test:contract` 7 passed（約27秒）
+- tarball（`0.1.0-rc.0`）を`npm install -g`した`masuda-sandbox serve --socket /tmp/x.sock`に対しても`pnpm test:contract` 7 passed（約26秒）
+- `pnpm test` 61 passed（serverinfo 6件追加）
+### tarballの確認
+別ディレクトリ（scratchpad）で`masuda-sandbox-0.1.0.tgz`（README込み、280kB）を`sha256sum -c`→`npm install -g`（15パッケージ、`gondolin-krun-runner-linux-x64`もoptionalで入った）→`masuda-sandbox --version`=`0.1.0`→`serve --socket /tmp/x.sock`で`listening`、`GetServerInfo`=`{version:"0.1.0", contract:"masuda.sandbox.v1", contractSha256:"495d811e…27fd", gondolinVersion:"0.12.0", platform:"linux/amd64"}`。確認後`npm uninstall -g`済み
+### ワークフローの確認
+このホストでは実行していない。`go run github.com/rhysd/actionlint/cmd/actionlint@latest`（v1.7.12）で2ファイルともエラー0（shellcheck未導入のためrunスクリプトの検査は無効）。`act -l`でジョブ認識のみ。`act`本体は共用ホストのDockerにランナーイメージを引くので走らせていない
 ## 未完と理由
-- なし（S12の範囲）。S8は範囲外（指示により後回し）
+- なし（S13の範囲）。ワークフローの実走は最初のPR/タグで確かめる（下の「次の一手」）
+- S8は範囲外（指示により後回し）
 ## 次の一手
-1. masuda側でM8相当（Claude Codeの`POST /v1/messages`のSSE）を再確認する。S11で疑った「最初のバイトを待ちきれず切った」はこれで解消しているはず
-2. masuda側: `serve/activity.go`の`inflightStale`（2分の打ち切り）は不要（S11から変わらず）
+1. push後、最初のPRかmain/developへのpushで`ci.yml`が緑になるのを見る。特に`pnpm/action-setup`のpnpm 11.9.0と`pnpm-workspace.yaml`の`allowBuilds`（esbuild・@bufbuild/buf）がCIでも効くか
+2. `v0.1.0`はmasuda側の`docs/design/release.md`（M13）の順序で打つ。`v0.1.0-rc.1`などのプレリリースタグで一度release.ymlを通してから本番タグにするのが安全（softprops/action-gh-releaseはタグ名で`prerelease`を自動判定しないので、必要なら`prerelease: true`を足す）
 3. `docs/work-orders.md`のS8（SSH egress）
 ## 注意点
-- `src/netwatch.ts`はGondolin 0.12.0の非公開メソッド（`handleTcpConnect`・`handleTcpSend`・`handleTcpClose`・`abortTcpSession`・`ensureTlsSession`・`tcpSessions`・`stack.handleTcpData`）とnetのdebugログ文言`http bridge response `に依存する。Gondolinを上げたら上の手動確認（特に/drip・/status/418・`-m 1`）をやり直す。起動ログに`gondolin network backend not recognized`／`gondolin network stack not recognized`が出たら壊れている。debugログ文言だけ変わった場合は警告が出ず全statusが0になる
-- `vm.ts`の`debug: ["net"]`は今やstatusの判定にも必要。外さない
-- `onResponse`はもう渡していないので、応答本文はGondolinの`maxHttpResponseBodyBytes`上限にもかからない（ストリーム経路は上限を見ない）
-- `pkill -f`で止めない。`pgrep -f '^node dist/cli.js'`でPIDを取ってkill。`dist/`を作り直したらサービス再起動
-- 残したもの: QEMUなし（親セッションのPID 12244以外）。サービスは停止済み。`sandboxes.json`は空。Dockerイメージは作っていない。Gondolin資産は増やしていない。`/tmp`に`gondolin-build-*`・`masuda-sandbox-build-*`なし
+- **`npm pkg set version`を手元で試したら、`git checkout package.json`で戻さない**。未コミットの変更ごと消える（今回、esbuild追加と依存移動が一度消えた）。`docs/release.md`のとおりコピーから戻す
+- `src/version.ts`は生成物（gitignore）。`pnpm build`/`pnpm test`を通さずにtscやvitestを直接叩くと無くて落ちる。`node scripts/gen-version.mjs`を先に
+- `dist/`は今`cli.js`と`cli.js.map`だけ。`MASUDA_SANDBOX_VERSION`付きでbuildした後は`pnpm build`でdevに戻す（現在のdistはdev）
+- Gondolinを上げるときは`external`のままでよいが、`gondolin_version`は利用者の環境で解決された版になる（`^0.12.0`）。S12の注意点（非公開メソッド依存）は変わらず
+- `pkill -f`で止めない。`pgrep -f '^node dist/cli.js'`でPIDを取ってkill。グローバルインストール版は`pgrep -f 'masuda-sandbox serve'`
+- 残したもの: QEMUなし（親セッションのPID 12244以外）。サービスは停止済み。`sandboxes.json`は空。Dockerイメージは増やしていない（C-S2は既存ビルドを再利用）。Gondolin資産は増やしていない。グローバルインストールなし（アンインストール済み）。scratchpadにtgzが残るのみ。`/tmp`に`gondolin-build-*`・`masuda-sandbox-build-*`・`x.sock`なし
 ## 契約への提案
 - なし
