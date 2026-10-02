@@ -229,8 +229,10 @@ message ExecRequest {
   // Overrides, applied last. The service always provides a base environment
   // the caller may rely on: HOME (the user's home from the guest's passwd),
   // XDG_CACHE_HOME / XDG_CONFIG_HOME / XDG_DATA_HOME under that HOME, a PATH
-  // covering /usr/local/bin and $HOME/.local/bin, then the image's ENV on
-  // top of those, then CreateSandboxRequest.env and secret placeholders.
+  // covering /usr/local/bin, then the image's ENV on top of those, then
+  // CreateSandboxRequest.env and secret placeholders. Whatever PATH results,
+  // the service prepends $HOME/.local/bin to it (where the native Claude
+  // Code installs), so the image's own PATH never hides it.
   map<string, string> env = 6;
   // Fed to the process's stdin, then stdin is closed. Not for interactive use.
   bytes stdin = 7;
@@ -327,9 +329,12 @@ message SandboxEvent {
   }
   message HttpRequestFinished {
     uint64 request_id = 1;
-    // HTTP status, or 0 when the request ended without a response (client
-    // closed the connection, upstream failed, request aborted). Every
-    // HttpRequestStarted is followed by exactly one HttpRequestFinished.
+    // HTTP status, or 0 when the request ended without a response seen by
+    // the policy layer: the guest closed the connection, upstream failed,
+    // the request was aborted, or the hop was a redirect the host followed
+    // (each hop is its own Started/Finished pair; only the final hop
+    // carries the status). Every HttpRequestStarted is followed by exactly
+    // one HttpRequestFinished.
     uint32 status = 2;
     uint32 duration_ms = 3;
   }

@@ -83,6 +83,13 @@
 - `inflight_http_requests`もこれで減らす。S4の「10分で捨てる」規則はこの上で保険として残す
 - 契約テスト: C-S1〜C-S7が緑のまま。単体テストで確認
 
+## S12. レスポンスのストリーミングを取り戻す（S11の発見。優先度高）
+
+- サービスが常に`onResponse`を渡しているため、Gondolinは**応答を全部バッファしてからゲストへ送る**。Claude APIのSSE（`/v1/messages`）もストリーミングにならず、ゲストのClaude Codeは応答の最後まで何も受け取らない。長い応答ではGondolinの応答サイズ上限に当たる恐れもある
+- `onResponse`を渡すのをやめる。ステータスと完了時刻は、S11の`netwatch`でホスト→ゲストへ送られる最初のバイト列（`HTTP/1.1 200 ...`のステータス行）を読んで得る。完了は接続のクローズ（S11のとおり）。`HttpRequestFinished.status`はこれで埋める
+- 確認: 実機で`curl -N https://httpbin.org/stream/20`（または`/drip`）を流し、ゲスト側で最初の行が応答完了を待たずに届くこと（`curl -w '%{time_starttransfer}'`が全体時間より十分短い）。契約テストC-S1〜C-S7は緑のまま、`pnpm test`も緑
+- **PATHの約束**（契約を直した）: 既定環境のPATHに、イメージのENVがPATHを持っていても必ず`$HOME/.local/bin`を先頭に足す（native Claude Codeの置き場所。公式ubuntuイメージはENVでPATHを持つので、S10の実装だと隠れる）
+
 ## 契約テストの対応表
 
 | テスト | 項目 |
