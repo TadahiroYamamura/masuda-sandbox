@@ -42,6 +42,10 @@ const dockerPlatform: Record<Arch, string> = { x86_64: "linux/amd64", aarch64: "
 // gondolin CLI is in gondolin-build.ts.
 const buildChild = fileURLToPath(new URL("./gondolin-build.js", import.meta.url));
 
+export function dockerTag(arch: string, ociDigest: string): string {
+  return `masuda-sandbox/image:${arch}-${ociDigest.replace(/^sha256:/, "").slice(0, 16)}`;
+}
+
 async function imageEnv(ociDigest: string, signal?: AbortSignal): Promise<string[]> {
   let out = "";
   for await (const l of runLines("docker", ["image", "inspect", "--format", "{{json .Config.Env}}", ociDigest], { signal })) out += l;
@@ -88,7 +92,7 @@ export async function* buildImage(req: BuildRequest): AsyncGenerator<BuildEvent,
     // Gondolin's OCI importer takes an image reference rather than a bare
     // image id, so the result gets a tag derived from its digest. Identical
     // builds map to the same tag, so tags do not pile up on rebuilds.
-    const tag = `masuda-sandbox/image:${req.arch}-${ociDigest.replace(/^sha256:/, "").slice(0, 16)}`;
+    const tag = dockerTag(req.arch, ociDigest);
     yield { log: `==> docker tag ${ociDigest} ${tag}` };
     for await (const l of runLines("docker", ["tag", ociDigest, tag], { signal: req.signal })) yield { log: l };
 

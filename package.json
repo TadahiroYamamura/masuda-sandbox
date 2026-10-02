@@ -33,6 +33,8 @@
   "files": [
     "dist/cli.js",
     "dist/cli.js.map",
+    "dist/gondolin-build.js",
+    "dist/gondolin-build.js.map",
     "README.md"
   ]
 }

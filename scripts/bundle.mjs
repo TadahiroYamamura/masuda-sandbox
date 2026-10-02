@@ -7,8 +7,10 @@ import { rmSync } from "node:fs";
 rmSync("dist", { recursive: true, force: true });
 
 await build({
-  entryPoints: ["src/cli.ts"],
-  outfile: "dist/cli.js",
+  // gondolin-build is not imported by the CLI but started by build.ts as a
+  // child process from the file next to cli.js, so it needs its own output.
+  entryPoints: { cli: "src/cli.ts", "gondolin-build": "src/gondolin-build.ts" },
+  outdir: "dist",
   bundle: true,
   platform: "node",
   format: "esm",

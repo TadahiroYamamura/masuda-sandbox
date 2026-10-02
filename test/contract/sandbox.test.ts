@@ -7,11 +7,13 @@
 // S1 and is implemented by the sandbox work.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Code, ConnectError } from "@connectrpc/connect";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
+import { removeImage } from "./cleanup-image.js";
 import { connect, type Client } from "./client.js";
 import {
   SandboxState,
@@ -20,6 +22,7 @@ import {
 
 const socket = process.env.MASUDA_SANDBOX_SOCKET;
 const imageDir = path.resolve(__dirname, "image"); // Dockerfile: ubuntu + curl + git + user `ubuntu`
+const freshImageDir = path.resolve(__dirname, "image-fresh"); // Dockerfile: alpine, plus a random line the test appends
 let client: Client;
 let buildId = "";
 
@@ -70,6 +73,31 @@ describe.skipIf(!socket)("sandbox contract", () => {
   });
 
   // ---- C-S2 ---------------------------------------------------------------
+  // Two steps. The first builds an OCI image no earlier run has seen, so the
+  // assets cannot be reused and the build has to go through gondolin build;
+  // it is removed again at the end, from outside the service. The second is
+  // the long-lived contract:test image the later tests boot, which is reused
+  // across runs to avoid ~400MB of new assets each time.
+  it("C-S2 builds a never-seen image through to new assets and lists it", async () => {
+    const ctx = fs.mkdtempSync(path.join(os.tmpdir(), "ct-image-fresh-"));
+    fs.writeFileSync(path.join(ctx, "Dockerfile"), `${fs.readFileSync(path.join(freshImageDir, "Dockerfile"), "utf8")}RUN echo ${randomUUID()} > /fresh\n`);
+    const before = new Set((await client.listImages({})).images.map((i) => i.buildId));
+    let built;
+    try {
+      for await (const ev of client.buildImage({ contextDir: ctx, dockerfile: "Dockerfile", name: "contract:fresh", arch: "" })) {
+        if (ev.event.case === "built") built = ev.event.value;
+      }
+      expect(built?.buildId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(before).not.toContain(built!.buildId);
+      const list = await client.listImages({});
+      expect(list.images.map((i) => i.buildId)).toContain(built!.buildId);
+    } finally {
+      fs.rmSync(ctx, { recursive: true, force: true });
+      if (built?.buildId) await removeImage(built.buildId);
+    }
+    expect((await client.listImages({})).images.map((i) => i.buildId)).not.toContain(built!.buildId);
+  }, 600_000);
+
   it("C-S2 builds an image from a Dockerfile and lists it", async () => {
     let built;
     const lines: string[] = [];
