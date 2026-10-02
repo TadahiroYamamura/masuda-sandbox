@@ -226,6 +226,11 @@ message ExecRequest {
   // and is how privileged sandboxes run.
   string user = 4;
   string cwd = 5;
+  // Overrides, applied last. The service always provides a base environment
+  // the caller may rely on: HOME (the user's home from the guest's passwd),
+  // XDG_CACHE_HOME / XDG_CONFIG_HOME / XDG_DATA_HOME under that HOME, a PATH
+  // covering /usr/local/bin and $HOME/.local/bin, then the image's ENV on
+  // top of those, then CreateSandboxRequest.env and secret placeholders.
   map<string, string> env = 6;
   // Fed to the process's stdin, then stdin is closed. Not for interactive use.
   bytes stdin = 7;
