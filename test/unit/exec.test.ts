@@ -54,11 +54,20 @@ describe("default exec environment", () => {
 
   it("layers service defaults < image ENV < sandbox env", () => {
     const env = execBaseEnv("/root", { PATH: "/opt/go/bin:/usr/bin", GOPATH: "/go", A: "image" }, { A: "sandbox" });
-    expect(env.PATH).toBe("/opt/go/bin:/usr/bin");
+    expect(env.PATH).toBe("/root/.local/bin:/opt/go/bin:/usr/bin");
     expect(env.GOPATH).toBe("/go");
     expect(env.A).toBe("sandbox");
     expect(env.HOME).toBe("/root");
     expect(env.XDG_CACHE_HOME).toBe("/root/.cache");
+  });
+
+  it("puts $HOME/.local/bin first in any resulting PATH, once", () => {
+    expect(execBaseEnv("/home/u", undefined, {}).PATH).toBe(`/home/u/.local/bin:${SYSTEM}`);
+    expect(execBaseEnv("/home/u", { PATH: "/usr/bin" }, {}).PATH).toBe("/home/u/.local/bin:/usr/bin");
+    expect(execBaseEnv("/home/u", { PATH: "/usr/bin" }, { PATH: "/sb" }).PATH).toBe("/home/u/.local/bin:/sb");
+    expect(execBaseEnv("/home/u", { PATH: "/home/u/.local/bin:/x" }, {}).PATH).toBe("/home/u/.local/bin:/x");
+    expect(execBaseEnv("/home/u", { PATH: "" }, {}).PATH).toBe("/home/u/.local/bin");
+    expect(execBaseEnv(undefined, { PATH: "/usr/bin" }, {}).PATH).toBe("/usr/bin");
   });
 
   it("lets Exec.env override everything", () => {

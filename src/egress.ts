@@ -36,6 +36,9 @@ const DEFAULT_PLACEHOLDER_LENGTH = 40;
 const PENDING_TTL_MS = 10 * 60_000;
 const MAX_TRACKED_CONNECTIONS = 4096;
 const PROTOCOL_DENY_DEDUPE_MS = 5_000;
+// A response head longer than this without its status line is treated as
+// unreadable (status 0) rather than buffered further.
+const MAX_RESPONSE_HEAD_BYTES = 64 * 1024;
 
 function invalid(msg: string): ConnectError {
   return new ConnectError(msg, Code.InvalidArgument);
@@ -125,18 +128,47 @@ interface Started {
 interface Connection {
   // The hop waiting for its response on this connection.
   hop: Started | undefined;
+  // Gondolin got the hop's final upstream response, so the next response
+  // head written to the guest is the upstream's and not one Gondolin made up
+  // for a failure (502 etc., which the contract reports as status 0).
+  answered: boolean;
+  head: Buffer | undefined;
+  status: number | undefined;
   closed: boolean;
   seenAt: number;
 }
 
-// The guest's TCP connections as Gondolin's network backend sees them, so that
-// a started request can be finished when its connection ends without a
-// response. Gondolin's public hooks carry no such signal: onResponse is
-// skipped on every failure path, the Request given to onRequest has no abort
-// signal, and when the guest disconnects Gondolin keeps fetching and calls
-// onResponse later as if nothing happened. Gondolin answers every guest
-// request with "Connection: close", so one connection carries one guest
-// request plus the redirect hops Gondolin follows for it.
+// The status of the first final response head in bytes written to the guest,
+// undefined while more bytes are needed, 0 when the head is unreadable.
+export function responseStatus(buf: Buffer): number | undefined {
+  let at = 0;
+  for (;;) {
+    const eol = buf.indexOf("\r\n", at);
+    if (eol < 0) return buf.length > MAX_RESPONSE_HEAD_BYTES ? 0 : undefined;
+    const m = /^HTTP\/\d(?:\.\d)? (\d{3})(?: |$)/.exec(buf.toString("latin1", at, eol));
+    if (!m) return 0;
+    const status = Number(m[1]);
+    if (status >= 200 || status === 101) return status;
+    const end = buf.indexOf("\r\n\r\n", at);
+    if (end < 0) return buf.length > MAX_RESPONSE_HEAD_BYTES ? 0 : undefined;
+    at = end + 4;
+  }
+}
+
+// The guest's TCP connections as Gondolin's network backend sees them. A
+// started request is finished when its connection ends, with the status read
+// from the response head written to the guest. Gondolin's public hooks carry
+// no end-of-request signal: the Request given to onRequest has no abort
+// signal, and onResponse is skipped on every failure path. onResponse is not
+// used at all because its mere presence makes Gondolin buffer every response
+// body instead of streaming it (SSE from the Claude API included). Gondolin
+// answers every guest request with "Connection: close", so one connection
+// carries one guest request plus the redirect hops Gondolin follows for it.
+//
+// The status is taken only after Gondolin logged "http bridge response" for
+// the hop (in the connection's context, see Egress.onDebug): the head bytes
+// alone cannot tell an upstream 502 from the 502 Gondolin writes itself when
+// the upstream fetch fails, and the latter must be reported as 0.
 //
 // run() wraps Gondolin's handling of the guest's bytes in an AsyncLocalStorage
 // context, which onRequest/onResponse read back to learn their connection.
@@ -148,7 +180,7 @@ export class GuestConnections {
   private readonly als = new AsyncLocalStorage<Connection>();
   private readonly byKey = new Map<string, Connection>();
 
-  constructor(private readonly onEnd: (hop: Started) => void) {}
+  constructor(private readonly onEnd: (hop: Started, status: number) => void) {}
 
   current(): Connection | undefined {
     return this.als.getStore();
@@ -169,8 +201,35 @@ export class GuestConnections {
     this.end(key);
   }
 
+  begin(c: Connection, hop: Started): void {
+    c.hop = hop;
+    c.answered = false;
+    c.head = undefined;
+    c.status = undefined;
+  }
+
+  upstreamAnswered(): void {
+    const c = this.current();
+    if (c?.hop) c.answered = true;
+  }
+
+  // Where bytes written to the guest on the connection now open under key
+  // go. Taken once per TLS session so that a late write on a closed
+  // connection is not read as the response of a new one reusing its key.
+  sink(key: string): (data: Uint8Array) => void {
+    const c = this.byKey.get(key);
+    return c ? (data) => this.feed(c, data) : () => {};
+  }
+
+  private feed(c: Connection, data: Uint8Array): void {
+    if (c.closed || !c.hop || !c.answered || c.status !== undefined || data.length === 0) return;
+    c.head = c.head ? Buffer.concat([c.head, data]) : Buffer.from(data);
+    c.status = responseStatus(c.head);
+    if (c.status !== undefined) c.head = undefined;
+  }
+
   private track(key: string): Connection {
-    const c: Connection = { hop: undefined, closed: false, seenAt: Date.now() };
+    const c: Connection = { hop: undefined, answered: false, head: undefined, status: undefined, closed: false, seenAt: Date.now() };
     this.byKey.set(key, c);
     if (this.byKey.size > MAX_TRACKED_CONNECTIONS) {
       const now = Date.now();
@@ -186,7 +245,7 @@ export class GuestConnections {
     c.closed = true;
     const hop = c.hop;
     c.hop = undefined;
-    if (hop) this.onEnd(hop);
+    if (hop) this.onEnd(hop, c.status ?? 0);
   }
 }
 
@@ -205,7 +264,7 @@ export class GuestConnections {
 export class Egress {
   readonly placeholders: Record<string, string>;
   readonly httpHooks: HttpHooks;
-  readonly connections = new GuestConnections((hop) => this.finish(hop, 0));
+  readonly connections = new GuestConnections((hop, status) => this.finish(hop, status));
   private readonly secrets: Secret[];
   private readonly manager: SecretManager;
   private policy: PolicyRecord;
@@ -230,7 +289,6 @@ export class Egress {
       ),
       isRequestAllowed: (req) => this.isRequestAllowed(req),
       onRequest: (req) => this.onRequest(req),
-      onResponse: (res, req) => this.onResponse(res, req),
     });
     this.httpHooks = hooks.httpHooks;
     this.manager = hooks.secretManager;
@@ -256,6 +314,10 @@ export class Egress {
   // log, so that log is parsed for them.
   readonly onDebug: DebugLogFn = (component, message) => {
     if (component !== "net") return;
+    if (message.startsWith("http bridge response ")) {
+      this.connections.upstreamAnswered();
+      return;
+    }
     const m = /^(?:tcp|udp) blocked \S+ -> (\S+)/.exec(message);
     if (!m) return;
     const dst = m[1]!;
@@ -336,7 +398,7 @@ export class Egress {
     // ends with status 0 like any other hop the guest got no response for.
     if (conn?.hop) this.finish(conn.hop, 0);
     const started = this.recordStarted(method, host, url.pathname);
-    if (conn) conn.hop = started;
+    if (conn) this.connections.begin(conn, started);
     else this.pushByRequest(`${method} ${req.url}`, started);
     return next;
   }
@@ -373,14 +435,14 @@ export class Egress {
     this.events.push({ case: "httpFinished", value: { requestId: s.id, status, durationMs: Date.now() - s.startedAt } });
   }
 
+  // For when the network backend could not be watched (see watchConnections):
+  // the requests then have no connection, and are finished by onResponse,
+  // paired by method and URL, at the cost of Gondolin buffering responses.
+  useResponseHook(): void {
+    this.httpHooks.onResponse = (res, req) => this.onResponse(res, req);
+  }
+
   private onResponse(res: Response, req: Request): undefined {
-    const conn = this.connections.current();
-    if (conn) {
-      const hop = conn.hop;
-      conn.hop = undefined;
-      if (hop) this.finish(hop, res.status);
-      return undefined;
-    }
     const key = `${req.method.toUpperCase()} ${req.url}`;
     const list = this.byRequest.get(key);
     const p = list?.shift();

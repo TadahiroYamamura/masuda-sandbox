@@ -15,6 +15,7 @@ export interface VmNetwork {
   httpHooks: HttpHooks;
   onDebug: DebugLogFn;
   connections: GuestConnections;
+  useResponseHook(): void;
 }
 
 export async function bootVm(rec: SandboxRecord, imageDir: string, env: Record<string, string>, net: VmNetwork): Promise<GuestVm> {
@@ -37,7 +38,7 @@ export async function bootVm(rec: SandboxRecord, imageDir: string, env: Record<s
     // guest during start(); the base image is never touched.
     rootfs: rec.diskMib ? { size: `${rec.diskMib}M` } : undefined,
   });
-  watchConnections(vm, net.connections);
+  if (!watchConnections(vm, net.connections)) net.useResponseHook();
   try {
     await vm.start();
   } catch (e) {

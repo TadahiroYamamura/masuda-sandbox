@@ -93,11 +93,20 @@ export function serviceDefaultEnv(home: string | undefined): Record<string, stri
   };
 }
 
-// The image's ENV overrides the service defaults (an image that sets PATH has
-// its PATH respected) and is overridden by CreateSandbox.env; Exec.env is
-// applied on top of the result in guestArgv.
+// The image's ENV overrides the service defaults and is overridden by
+// CreateSandbox.env; Exec.env is applied on top of the result in guestArgv.
+// $HOME/.local/bin is then put first in whatever PATH resulted, because that
+// is where the native Claude Code installs and images such as the official
+// ubuntu set PATH in their ENV, which would otherwise hide it.
 export function execBaseEnv(home: string | undefined, imageEnv: Record<string, string> | undefined, sandboxEnv: Record<string, string>): Record<string, string> {
-  return { ...serviceDefaultEnv(home), ...imageEnv, ...sandboxEnv };
+  const env = { ...serviceDefaultEnv(home), ...imageEnv, ...sandboxEnv };
+  if (!home) return env;
+  const localBin = `${home}/.local/bin`;
+  const path = env.PATH ?? "";
+  // An empty entry would put the working directory on PATH.
+  if (path === "") env.PATH = localBin;
+  else if (path.split(":")[0] !== localBin) env.PATH = `${localBin}:${path}`;
+  return env;
 }
 
 // Docker's Config.Env entries ("K=V"). Names env(1) cannot take are dropped

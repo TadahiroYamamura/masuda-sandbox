@@ -1,7 +1,7 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 
-import { Egress } from "../../src/egress.js";
+import { Egress, responseStatus } from "../../src/egress.js";
 import { EventQueue } from "../../src/events.js";
 import { SecretDeclSchema, SubstituteIn } from "../../src/gen/masuda/sandbox/v1/sandbox_pb.js";
 
@@ -75,6 +75,12 @@ describe("Egress", () => {
     const ok = (status = 200) => new Response("x", { status });
     // As Gondolin does: the hooks run inside the handling of the guest's bytes.
     const onConn = <T>(eg: Egress, key: string, fn: () => Promise<T>) => eg.connections.run(key, fn);
+    // What Gondolin does once the upstream answered: log it in the
+    // connection's context, then write the response head to the guest.
+    const respond = (eg: Egress, key: string, status: number) => {
+      eg.onDebug("net", `http bridge response ${status} X`);
+      eg.connections.sink(key)(Buffer.from(`HTTP/1.1 ${status} X\r\ncontent-length: 1\r\n\r\nx`));
+    };
     const until = async (cond: () => boolean) => {
       for (let i = 0; i < 100 && !cond(); i++) await new Promise((r) => setImmediate(r));
       expect(cond()).toBe(true);
@@ -87,8 +93,9 @@ describe("Egress", () => {
         const req = new Request("https://api.example.com/a");
         await eg.httpHooks.onRequest!(req);
         expect(eg.activity().inflight).toBe(1);
-        await eg.httpHooks.onResponse!(ok(201), req);
+        respond(eg, "k1", 201);
       });
+      expect(finished(events)).toEqual([]); // finished only when the connection ends
       eg.connections.closed("k1");
       expect(finished(events)).toEqual([[1, 201]]);
       expect(eg.activity().inflight).toBe(0);
@@ -103,7 +110,7 @@ describe("Egress", () => {
       const handling = onConn(eg, "k1", async () => {
         await eg.httpHooks.onRequest!(req);
         await gate; // Gondolin keeps fetching after the guest left
-        await eg.httpHooks.onResponse!(ok(), req);
+        respond(eg, "k1", 200);
       });
       await until(() => eg.activity().inflight === 1);
       eg.connections.closed("k1");
@@ -128,16 +135,18 @@ describe("Egress", () => {
       const handling = onConn(eg, "k1", async () => {
         await eg.httpHooks.onRequest!(req);
         await gate; // upstream still fetching
-        await eg.httpHooks.onResponse!(ok(), req);
+        eg.onDebug("net", "http bridge response 200 OK");
+        oldSink(Buffer.from("HTTP/1.1 200 OK\r\n\r\n"));
       });
       await until(() => eg.activity().inflight === 1);
+      const oldSink = eg.connections.sink("k1");
       eg.connections.closed("k1");
       eg.connections.opened("k1"); // the key is reused by a new connection
       await onConn(eg, "k1", async () => eg.httpHooks.onRequest!(new Request("https://api.example.com/slow")));
       release();
       await handling;
-      expect(finished(events)).toEqual([[1, 0]]);
-      expect(eg.activity().inflight).toBe(1);
+      eg.connections.closed("k1");
+      expect(finished(events)).toEqual([[1, 0], [2, 0]]);
     });
 
     it("finishes each redirect hop when the next one starts", async () => {
@@ -148,7 +157,7 @@ describe("Egress", () => {
         await eg.httpHooks.onRequest!(new Request("https://api.example.com/r2"));
         const last = new Request("https://api.example.com/final");
         await eg.httpHooks.onRequest!(last);
-        await eg.httpHooks.onResponse!(ok(), last);
+        respond(eg, "k1", 200);
       });
       eg.connections.closed("k1");
       expect(finished(events)).toEqual([[1, 0], [2, 0], [3, 200]]);
@@ -160,6 +169,7 @@ describe("Egress", () => {
       await onConn(eg, "k1", async () => {
         await eg.httpHooks.onRequest!(new Request("https://api.example.com/x"));
         // upstream connect or TLS failed: Gondolin answers 502 itself and closes.
+        eg.connections.sink("k1")(Buffer.from("HTTP/1.1 502 Bad Gateway\r\n\r\n502 Bad Gateway\n"));
       });
       expect(finished(events)).toEqual([]);
       eg.connections.closed("k1");
@@ -192,8 +202,32 @@ describe("Egress", () => {
       expect(finished(events)).toEqual([[1, 0]]);
     });
 
+    it("reads a status line split across writes and skips interim responses", async () => {
+      const { eg, events } = setup();
+      eg.connections.opened("k1");
+      await onConn(eg, "k1", async () => {
+        await eg.httpHooks.onRequest!(new Request("https://api.example.com/x"));
+        eg.onDebug("net", "http bridge response 418 I'm a teapot");
+      });
+      const sink = eg.connections.sink("k1");
+      sink(Buffer.from("HTTP/1.1 41"));
+      sink(Buffer.from("8 I'm a teapot\r\n"));
+      sink(Buffer.from("HTTP/1.1 500 later bytes are not a head\r\n"));
+      eg.connections.closed("k1");
+      expect(finished(events)).toEqual([[1, 418]]);
+      expect(responseStatus(Buffer.from("HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 204 No Content\r\n"))).toBe(204);
+      expect(responseStatus(Buffer.from("HTTP/1.1 100 Continue\r\n"))).toBeUndefined();
+      expect(responseStatus(Buffer.from("garbage\r\n"))).toBe(0);
+      expect(responseStatus(Buffer.alloc(70 * 1024, 0x41))).toBe(0);
+    });
+
+    it("leaves onResponse unset so that Gondolin streams responses", () => {
+      expect(setup().eg.httpHooks.onResponse).toBeUndefined();
+    });
+
     it("pairs by method and URL when the hooks run outside any connection", async () => {
       const { eg, events } = setup();
+      eg.useResponseHook();
       const a = new Request("https://api.example.com/a");
       const b = new Request("https://api.example.com/b");
       await eg.httpHooks.onRequest!(a);
