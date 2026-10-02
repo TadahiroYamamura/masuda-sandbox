@@ -3,8 +3,8 @@ import { VM, type DebugLogFn, type HttpHooks } from "@earendil-works/gondolin";
 import type { SandboxRecord } from "./sandboxes.js";
 
 // The rest of the service sees only this much of a Gondolin VM, which keeps
-// Gondolin's types from spreading beyond this file and exec.ts.
-export type GuestVm = Pick<VM, "exec" | "close" | "getHostPid">;
+// Gondolin's types from spreading beyond this file, exec.ts and files.ts.
+export type GuestVm = Pick<VM, "exec" | "fs" | "close" | "getHostPid">;
 
 export interface VmNetwork {
   httpHooks: HttpHooks;

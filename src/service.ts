@@ -7,7 +7,8 @@ import path from "node:path";
 
 import { buildImage, parseArch } from "./build.js";
 import { runExec } from "./exec.js";
-import { DestroySandboxResponseSchema, ImageSchema, ListImagesResponseSchema, ListSandboxesResponseSchema, SandboxService, SetPolicyResponseSchema, type CreateSandboxRequest, type Image } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
+import { readGuestFile, writeGuestFile } from "./files.js";
+import { DestroySandboxResponseSchema, ImageSchema, ListImagesResponseSchema, ListSandboxesResponseSchema, SandboxService, SetPolicyResponseSchema, WriteFileResponseSchema, type CreateSandboxRequest, type Image } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
 import type { ImageRecord, ImageStore } from "./images.js";
 import { log } from "./log.js";
 import { ProcessError } from "./proc.js";
@@ -99,6 +100,25 @@ export function sandboxServiceImpl(registry: SandboxRegistry, images: ImageStore
     async *exec(req, ctx) {
       const sb = registry.running(req.id);
       for await (const ev of runExec(sb.vm, req, sb.record.defaultUser, sb.env, ctx.signal)) yield { event: ev };
+    },
+    async *readFile(req, ctx) {
+      const sb = registry.running(req.id);
+      for await (const data of readGuestFile(sb.vm, req.path, req.maxBytes, ctx.signal)) yield { data };
+    },
+    async writeFile(reqs, ctx) {
+      const it = reqs[Symbol.asyncIterator]();
+      const first = await it.next();
+      if (first.done || first.value.msg.case !== "header") throw new ConnectError("the first message must be the header", Code.InvalidArgument);
+      const header = first.value.msg.value;
+      const sb = registry.running(header.id);
+      async function* data(): AsyncGenerator<Uint8Array> {
+        for (let r = await it.next(); !r.done; r = await it.next()) {
+          if (r.value.msg.case !== "data") throw new ConnectError("only the first message may be the header", Code.InvalidArgument);
+          yield r.value.msg.value;
+        }
+      }
+      const bytesWritten = await writeGuestFile(sb.vm, header, sb.record.defaultUser, data(), ctx.signal);
+      return create(WriteFileResponseSchema, { bytesWritten });
     },
     async setPolicy(req) {
       await registry.setPolicy(req.id, { allowedHosts: [...(req.policy?.allowedHosts ?? [])], enabledSecrets: [...(req.policy?.enabledSecrets ?? [])] });
