@@ -1,31 +1,86 @@
 # HANDOFF
 ## 作業項目
-S9（硬化）完了。S8（SSH egress）は指示により後回しで、手を付けていない。
-- **BuildImageの冪等化**（`src/build.ts`・`src/images.ts`・`src/service.ts`）: `docker build`後、`ImageStore.findReusable(ociDigest, arch)`が同じ(oci_digest, arch)で資産ディレクトリが実在する最新レコードを返せば、`docker tag`と`gondolin build`を省いてその`Image`を`built`で返す。ログ行は`==> reusing existing gondolin assets <build_id> for <digest> (gondolin build skipped)`、サービスログは`"msg":"image reused"`。既存レコードは書き換えない（nameが違っても元のnameのまま）
-  - Gondolinのbuild idは**内容から決まらない**（同じ入力でも毎回別id）。以前の`ImageStore.record`のコメントは誤りだったので直した
-- **`node dist/cli.js images prune [--dry-run]`**（`src/prune.ts`・`src/cli.ts`、契約外）: 消すのは (1) 資産の無いレコード (2) 同じ(oci_digest, arch)の古いレコード（最新1つを残す） (3) 残るレコードが指さない資産ディレクトリ。残すのは Gondolinのref（`listImageRefs()`、例 alpine-base:latest → `3cd7a864...`）が指す資産、`sandboxes.json`の記録が使う資産、images.jsonに無く30分以内に更新された資産（実行中のビルドかもしれない）。サイズはブロック数（du相当）
-- **Exec同時数上限**（`src/exec.ts`の`ExecSlots`、`src/sandboxes.ts`のEntryごと）: 既定8、超えたら`ResourceExhausted`（`too many concurrent execs (limit 8)`）。正常終了・エラー・取消で枠を返す
-- **ReadFile既定64MiB**: S5で`src/files.ts`に入っていた（確認のみ）。**イベントバッファ1000件**: `src/events.ts`の`CAPACITY`（確認のみ）
-- **メトリクスログ**（`src/metrics.ts`、`src/server.ts`で起動）: 60秒ごとに`{"msg":"metrics","sandboxes":<全エントリ数>,"running":<RUNNING数>,"qemu":[{"id","pid","rssKib","execs"}]}`を標準エラーへ。RSSは`/proc/<pid>/status`の`VmRSS`（macOSでは`rssKib`が出ない）。`MASUDA_SANDBOX_METRICS_INTERVAL_MS`で間隔を変えられる（検証用）
-- 単体テスト追加: `test/unit/prune.test.ts`（findReusable・planPrune・applyPrune、`GONDOLIN_IMAGE_STORE`を一時ディレクトリに向ける）、`test/unit/limits.test.ts`（ExecSlots・VmRSSの解析）
+S10（実機1周で見つかった不足）完了。S8（SSH egress）は指示により後回しで、手を付けていない。実装コミット`26f4bd7`。
+- **`disk_mib`**（`src/vm.ts`・`src/service.ts`・`src/sandboxes.ts`）: `CreateSandboxRequest.disk_mib`>0なら`VM.create`の`rootfs: { size: "<n>M" }`（GondolinではMはMiB、1024基準）。Gondolinはqcow2のoverlayを`qemu-img resize`で広げ、`start()`中にゲストで`resize2fs /dev/vda`を走らせる。resize2fsが無いと`start()`が`failed to resize rootfs inside guest (exit 127): rootfs.size requires resize2fs ...`で失敗するので、これを`FailedPrecondition`（`disk_mib needs resize2fs in the image (install e2fsprogs): ...`）に読み替える。起動前に判定する手段は無い（イメージを起動しないと分からない）ため起動時の失敗で判定し、CreateSandbox自体が失敗する（エントリは残さない）。Gondolinがresize2fsの終了コードを見ているので、`df`での事後確認は入れていない。0なら`rootfs`を渡さず従来どおり。`SandboxRecord.diskMib`に記録
+- **Execの既定環境**（`src/exec.ts`の`serviceDefaultEnv`・`execBaseEnv`・`parseImageEnv`・`lookupHome`）: 優先順は「サービスの既定 < イメージのENV < CreateSandbox.env（+秘密のプレースホルダ） < Exec.env」
+  - サービスの既定: `HOME`=ゲストの`getent passwd <user>`の6列目（無ければ`/etc/passwd`をawk）、`XDG_CACHE_HOME`/`XDG_CONFIG_HOME`/`XDG_DATA_HOME`=`$HOME/.cache`・`.config`・`.local/share`、`PATH`=`$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`。ホームが引けない（ユーザーがいない）ときは`PATH`（システム部分のみ）だけで、存在しないユーザーのエラーはrunuserが出す
+  - ホームはサンドボックスごと・ユーザーごとにキャッシュ（`Entry.homes`）。見つかったものだけキャッシュする（Execで後からuseraddしたユーザーのため）。ユーザーごとの初回Execで1回余分なvm.execが走る
+  - イメージのENV: `BuildImage`で`docker build`直後に`docker image inspect --format '{{json .Config.Env}}' <id>`を取り、`images.json`の`env`（`"K=V"`の配列）に記録。再利用時（`image reused`）に既存レコードに`env`が無ければ埋める。`CreateSandbox`で`SandboxRecord.imageEnv`に写す。`env(1)`に渡せない名前は捨てる
+- **読み取り専用ディレクトリを含むイメージのビルド**（`src/gondolin-build.ts`新規・`src/build.ts`）: 下の「結論」のとおりGondolin側の不具合。gondolin CLIの代わりに、`buildAssets(config, { workDir, outputDir })`+`importImageFromDirectory`を呼ぶだけの子プロセス`dist/gondolin-build.js`を使う（同期処理でイベントループを止めないため子プロセスのまま）。作業・出力ディレクトリは`/tmp/masuda-sandbox-build-XXXX/{work,out}`、子の`TMPDIR`もそこ。終了時（成功・失敗とも）に`chmod -R u+w`してから消す。出力の`Build ID: <id>`はCLIと同じ形式
+- `runLines`に`env`オプションを足した（`src/proc.ts`）。`buf generate`で`src/gen/`を再生成（`diskMib`）
+- 単体テスト: `test/unit/exec.test.ts`に既定環境6件（既定値・ホーム不明・優先順・Exec.envの上書き・Config.Envの解析・ホーム検索）。`pnpm test`は40 passed
+### 読み取り専用ディレクトリの件の結論
+- 再現: `FROM ubuntu:24.04`→`USER ubuntu`→`mkdir -p ~/go/pkg/mod/... && chmod -R a-w ~/go/pkg/mod/example.com`のイメージを、gondolin 0.12.0のCLI（`gondolin build --config`、`oci.image`にそのタグ）でビルドすると、`Build complete! Assets written to ...`の**後**に`Build failed: EACCES, Permission denied: /tmp/gondolin-build-XXXX`で失敗し、一時ディレクトリが残る（`chmod -R u+w`しないと消せない）
+- 原因: `buildAssets()`（`host/src/build/index.ts`）が`finally`で`fs.rmSync(workDir, { recursive: true, force: true })`する。OCIのexportを展開した`workDir/rootfs`に所有者の書き込み権の無いディレクトリがあると、非rootのホストユーザーは中身を消せない。ビルド自体は成功しているが例外になり、CLIは`importImageFromDirectory`に進まない。upstreamのmain（scratchpadのcheckout `494cf18`）でも同じコード
+- sandbox側の修正で解消を確認（下の手動確認）。upstreamへのIssue下書き:
+
+```
+Title: `gondolin build` fails with EACCES when the OCI rootfs contains read-only directories
+
+`buildAssets()` removes its temporary work directory with
+`fs.rmSync(workDir, { recursive: true, force: true })`. When the OCI image
+contains directories without the owner write bit (e.g. a Go module cache
+created by a non-root `go mod download`, which is 0555), the extracted rootfs
+under `workDir/rootfs` keeps those modes and a non-root host user cannot
+delete their contents. The build has already succeeded at that point
+("Build complete! Assets written to ..."), but the rmSync throws, so the CLI
+reports a failure, never imports the assets, and leaves /tmp/gondolin-build-*
+behind.
+
+Steps to reproduce (Linux x86_64, Docker, gondolin 0.12.0, run as non-root):
+
+    cat > Dockerfile <<'EOF'
+    FROM ubuntu:24.04
+    USER ubuntu
+    RUN mkdir -p /home/ubuntu/go/pkg/mod/example.com/m@v1/sub \
+     && echo hi > /home/ubuntu/go/pkg/mod/example.com/m@v1/sub/f.go \
+     && chmod -R a-w /home/ubuntu/go/pkg/mod/example.com
+    USER root
+    EOF
+    docker build -t ro-repro:latest .
+    cat > build-config.json <<'EOF'
+    {"arch":"x86_64","distro":"alpine",
+     "oci":{"image":"ro-repro:latest","runtime":"docker","pullPolicy":"never"}}
+    EOF
+    gondolin build --config build-config.json
+
+Actual:
+
+    Build complete! Assets written to /tmp/gondolin-build-XXXX
+    Build failed: EACCES, Permission denied: /tmp/gondolin-build-YYYY
+
+and /tmp/gondolin-build-YYYY remains (removable only after `chmod -R u+w`).
+
+Expected: the build succeeds and is imported; the work directory is removed.
+
+Suggested fix: restore the owner write bit on directories (walk and
+chmod u+w) before removing the work directory in buildAssets' finally (and
+before alpine.ts rmSync's an existing rootfsDir). Exposing `--work-dir` on the
+CLI would also let callers clean up themselves.
+```
+
+### 手動確認（scratchpadのスクリプト、リポジトリには残していない）
+- **disk_mib**（contract:testイメージ `b6839a0d-...`）: `disk_mib: 0`で`df -h /`が`/dev/vda 289M 203M 80M 72%`、`disk_mib: 8192`で`/dev/vda 7.6G 203M 7.4G 3%`。8192の方で`$HOME`に2GiBを書けて`2.2G used / 5.4G avail`
+- **resize2fsなし**: `rm -f /usr/sbin/resize2fs`したイメージで`disk_mib: 4096`→`code=9 [failed_precondition] disk_mib needs resize2fs in the image (install e2fsprogs): failed to resize rootfs inside guest (exit 127): ...`。sandboxes.jsonに残らない
+- **環境変数**（contract:test、ubuntuで実行）: `HOME=/home/ubuntu`、`XDG_CACHE_HOME=/home/ubuntu/.cache`（`mkdir -p $XDG_CACHE_HOME/x`成功）、`XDG_CONFIG_HOME=/home/ubuntu/.config`、`XDG_DATA_HOME=/home/ubuntu/.local/share`。rootでは`HOME=/root`・`/root/.cache`等。PATHはubuntuイメージ自身の`/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`（イメージのENVが勝つので`$HOME/.local/bin`は入らない。指示の優先順どおり）
+- **イメージのENV**: `ENV FOO=from-image PATH=/opt/tool/bin:...`のイメージで`PATH=/opt/tool/bin:...`が見え、`CreateSandbox.env{FOO:from-create}`で`FOO=from-create`、さらに`Exec.env{FOO:from-exec}`で`from-exec`。images.jsonには`["PATH=/opt/tool/bin:...","FOO=from-image"]`が記録された
+- **読み取り専用ディレクトリ**: 上と同じイメージ（`~/go/pkg/mod/example.com`が0555）が`BuildImage`で約11.9秒で`built`。ゲスト内でも`dr-xr-xr-x ubuntu ubuntu`のまま。`/tmp`に`gondolin-build-*`・`masuda-sandbox-build-*`は残らない
 ## 完了した契約テスト
-C-S1〜C-S7すべて緑（S8は未着手）。`node dist/cli.js serve --socket $XDG_RUNTIME_DIR/masuda-sandbox-s9.sock`に対し`pnpm test:contract`を**2回連続**で7 passed（各約31〜33秒）。C-S2は約0.7〜0.8秒で、2回とも`image reused`（既存の`b6839a0d-...`）。`~/.cache/gondolin/images/objects`は15のまま増えていない。`pnpm test`は34 passed
-- 空の状態からの確認: `XDG_DATA_HOME`と`GONDOLIN_IMAGE_STORE`をscratchpadに向けた別サービスでC-S2だけを2回: 1回目`image built`（約11.7秒）で資産1つ、2回目`image reused`（0.3秒）で資産1つのまま。その一時ストアでprune（実削除）も確認し、ストアごと消した
-- 実VMでの手動確認（scratchpadのスクリプト、リポジトリには残していない）: `sleep 4`を8並列中の9本目はcode 8（ResourceExhausted）、8本は全部exit 0、その後のExecは成功。`sleep 30`を8並列で取消すると直後のExecは成功（枠が戻る）
-- メトリクス: 実行中のVMについて`rssKib`が351236〜515640程度で出ることを確認
+C-S1〜C-S7すべて緑（S8は未着手）。`node dist/cli.js serve --socket $XDG_RUNTIME_DIR/masuda-sandbox-s10.sock`に対し`pnpm test:contract`を2回連続で7 passed（約33秒・約30秒）。C-S2は約0.7秒で`image reused`（`b6839a0d-...`、このとき`env`が埋まった）。`pnpm test`は40 passed
 ## 未完と理由
-- **実データへの`images prune`（実削除）は未実行**。ユーザーが実行する。`--dry-run`の結果: レコード14件（すべて`contract:test`の同一digest `sha256:3f14a23c...`、最新の`b6839a0d-...`を残す）、資産ディレクトリ14個、**合計5.3 GiB**（各386.6 MiB）。サービス停止中に実行すること
-- S8は範囲外（指示により後回し）
+- なし（S10の範囲）。S8は範囲外（指示により後回し）
 ## 次の一手
-1. ユーザーが`node dist/cli.js images prune --dry-run`を見たうえで`node dist/cli.js images prune`を実行（サービス停止中）
-2. `docs/work-orders.md`のS8（SSH egress）
+1. masuda側: `guest.BaseEnv`による`Exec.env`での回避は不要になった（残しても上書きになるだけ）。ディスクは`disk_mib`で指定でき、`GOCACHE=/tmp/go-cache`への逃がしも不要になる。使うイメージにresize2fs（e2fsprogs）が要る（ubuntu:24.04には入っている）
+2. 既存のmasuda用イメージ（`5d40da65-...`・`e9d1cfc3-...`・`411234b3-...`）のレコードには`env`が無い。同じDockerfileで`BuildImage`し直せば（再利用で一瞬）埋まる。埋まるまでイメージのENVは引き継がれない
+3. upstreamへのIssue（上の下書き）を出すかはユーザー判断。直ったら`src/gondolin-build.ts`をやめてCLIに戻せる
+4. `docs/work-orders.md`のS8（SSH egress）
 ## 注意点
-- **pruneとサービスの同時実行は避ける**: images.jsonの読み書きは同一プロセス内でしか直列化していない。また、images.jsonに載っていてもビルド途中のレコードは無いが、サービスがビルド中に作った未記録の資産は30分ガードでしか守っていない
-- Exec上限の枠は「ホスト側で待っているExec」の数。取消やホスト側タイムアウトで枠は返るが、Gondolinは実行を放棄するだけなのでゲスト内のプロセスは動き続けることがある。ReadFile/WriteFileは内部でvm.execを使うが枠には数えていない
-- BuildImageの再利用はdocker buildの結果のimage idで判定する。`--provenance=false`を外すと毎回idが変わって再利用されなくなる（S2のコメント参照）
-- 同じDockerfileを同時に2本BuildImageすると、両方とも`gondolin build`を走らせ得る（再利用判定は完了済みのレコードだけを見る）。後でpruneが古い方を消す
-- metricsの`sandboxes`はSTARTING・STOPPED・FAILEDも含むエントリ数、`running`はRUNNINGのみ
-- `pkill -f`で止めない。`pgrep -f '^node dist/cli.js serve'`でPIDを取ってkill。`dist/`を作り直したらサービス再起動
-- 残したもの: QEMUなし（親セッションのPID 12244以外）。`/tmp/gondolin-ssh-*`なし。`sandboxes.json`は空。サービスは停止済み。Gondolin資産は15個のまま（prune待ち）。dockerタグ`masuda-sandbox/image:x86_64-3f14a23ce3f7d022`は継続
+- イメージのENVが`PATH`を持つと、サービス既定の`$HOME/.local/bin`は入らない（Docker公式のubuntu等は必ずPATHを持つ）。`shell`での実行は`/bin/sh -lc`なので、Ubuntuの`~/.profile`が`~/.local/bin`があれば足す
+- Gondolinのinitが入れる`UV_CACHE_DIR=/tmp/.cache/uv`（root所有）と`TMPDIR=/tmp`はExecに継承される（上書きしていない。指示の範囲外）。非rootでuvを使うと同じ問題が出るはず
+- `/bin/sh -lc`のログインシェルが`/etc/profile`でPATHを書き換えるディストリビューション（Debian系）では、既定・イメージのPATHが効かない
+- `disk_mib`はqcow2のoverlayを広げるだけで、ホストの実使用量は書いた分だけ。`qemu-img resize`はGondolin内で`execFileSync`（同期）だが短時間
+- BuildImageごとに`docker image inspect`が1回増えた
+- `pkill -f`で止めない。`pgrep -f '^node dist/cli.js'`でPIDを取ってkill。`dist/`を作り直したらサービス再起動
+- 残したもの: QEMUなし（親セッションのPID 12244以外）。サービスは停止済み。`sandboxes.json`は空。手動確認で作ったイメージ（`c222aa53-...`のレコード・資産、dockerタグ`masuda-sandbox/image:x86_64-ff1e4bca...`・`masuda-sandbox-s10/rodir`）は削除済み。Gondolin資産は4つ（既存のもの）。`images.json`の`contract:test`のレコードに`env`が入った
 ## 契約への提案
-なし
+なし。ただし既定環境の内容（上の優先順と変数）は契約に書かれていない。masudaが依存するなら`ExecRequest.env`のコメントに書くかを監督が判断してほしい
