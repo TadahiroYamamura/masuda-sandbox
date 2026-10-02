@@ -7,7 +7,7 @@ import path from "node:path";
 
 import { buildImage, parseArch } from "./build.js";
 import { runExec } from "./exec.js";
-import { DestroySandboxResponseSchema, ImageSchema, ListImagesResponseSchema, ListSandboxesResponseSchema, SandboxService, type CreateSandboxRequest, type Image } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
+import { DestroySandboxResponseSchema, ImageSchema, ListImagesResponseSchema, ListSandboxesResponseSchema, SandboxService, SetPolicyResponseSchema, type CreateSandboxRequest, type Image } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
 import type { ImageRecord, ImageStore } from "./images.js";
 import { log } from "./log.js";
 import { ProcessError } from "./proc.js";
@@ -98,7 +98,11 @@ export function sandboxServiceImpl(registry: SandboxRegistry, images: ImageStore
     },
     async *exec(req, ctx) {
       const sb = registry.running(req.id);
-      for await (const ev of runExec(sb.vm, req, sb.record.defaultUser, sb.record.env, ctx.signal)) yield { event: ev };
+      for await (const ev of runExec(sb.vm, req, sb.record.defaultUser, sb.env, ctx.signal)) yield { event: ev };
+    },
+    async setPolicy(req) {
+      await registry.setPolicy(req.id, { allowedHosts: [...(req.policy?.allowedHosts ?? [])], enabledSecrets: [...(req.policy?.enabledSecrets ?? [])] });
+      return create(SetPolicyResponseSchema, {});
     },
     getSandbox(req) {
       const sb = registry.get(req.id);

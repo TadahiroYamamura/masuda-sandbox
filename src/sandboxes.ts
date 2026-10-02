@@ -4,6 +4,8 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import path from "node:path";
 
 import { dataDir, readJsonFile, writeJsonFile } from "./datafile.js";
+import { Egress, validatePolicy } from "./egress.js";
+import { EventQueue } from "./events.js";
 import { PolicySchema, SandboxSchema, SandboxState, type Sandbox, type SecretDecl } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
 import { log } from "./log.js";
 import { bootVm, type GuestVm } from "./vm.js";
@@ -50,7 +52,9 @@ interface Entry {
   record: SandboxRecord;
   state: SandboxState;
   failure: string;
-  secrets: SecretDecl[];
+  // Absent for sandboxes restored as STOPPED: secret values are not persisted.
+  egress?: Egress;
+  events: EventQueue;
   vm?: GuestVm;
   // Settles when boot finished either way; destroy waits on it so that a VM
   // still booting is not left running behind a removed entry.
@@ -61,6 +65,8 @@ interface Entry {
 export interface RunningSandbox {
   record: SandboxRecord;
   vm: GuestVm;
+  // record.env plus the secret placeholders; what every Exec starts from.
+  env: Record<string, string>;
 }
 
 export function defaultSandboxesPath(): string {
@@ -78,7 +84,7 @@ export class SandboxRegistry {
   async load(): Promise<void> {
     const parsed = await readJsonFile<Partial<SandboxesFile>>(this.file);
     for (const record of Array.isArray(parsed?.sandboxes) ? parsed.sandboxes : []) {
-      this.entries.set(record.id, { record, state: SandboxState.STOPPED, failure: "", secrets: [], ready: Promise.resolve(), destroyed: false });
+      this.entries.set(record.id, { record, state: SandboxState.STOPPED, failure: "", events: new EventQueue(), ready: Promise.resolve(), destroyed: false });
     }
   }
 
@@ -95,7 +101,7 @@ export class SandboxRegistry {
     const e = this.entries.get(id);
     if (!e) throw new ConnectError(`sandbox ${JSON.stringify(id)} not found`, Code.NotFound);
     if (e.state !== SandboxState.RUNNING || !e.vm) throw new ConnectError(`sandbox ${JSON.stringify(id)} is not running`, Code.FailedPrecondition);
-    return { record: e.record, vm: e.vm };
+    return { record: e.record, vm: e.vm, env: guestEnv(e) };
   }
 
   // A STOPPED or FAILED record with the same id is replaced: the contract only
@@ -105,12 +111,18 @@ export class SandboxRegistry {
     if (prev && (prev.state === SandboxState.STARTING || prev.state === SandboxState.RUNNING)) {
       throw new ConnectError(`sandbox ${JSON.stringify(record.id)} already exists`, Code.AlreadyExists);
     }
+    for (const s of secrets) {
+      if (s.name in record.env) throw new ConnectError(`secret ${JSON.stringify(s.name)} collides with an env variable of the same name`, Code.InvalidArgument);
+    }
+    const events = new EventQueue();
+    const egress = new Egress(secrets, record.policy, events);
+    record.policy = egress.currentPolicy;
     let settle!: () => void;
-    const entry: Entry = { record, state: SandboxState.STARTING, failure: "", secrets, ready: new Promise((r) => (settle = r)), destroyed: false };
+    const entry: Entry = { record, state: SandboxState.STARTING, failure: "", egress, events, ready: new Promise((r) => (settle = r)), destroyed: false };
     this.entries.set(record.id, entry);
     try {
       await this.persist();
-      entry.vm = await bootVm(record, imageDir);
+      entry.vm = await bootVm(record, imageDir, guestEnv(entry), egress);
       if (entry.destroyed) throw new ConnectError(`sandbox ${JSON.stringify(record.id)} was destroyed while starting`, Code.Aborted);
       entry.state = SandboxState.RUNNING;
       log.info("sandbox running", { id: record.id, buildId: record.buildId, pid: entry.vm.getHostPid() });
@@ -125,6 +137,19 @@ export class SandboxRegistry {
     } finally {
       settle();
     }
+  }
+
+  // Takes effect from the next request: the hooks read the policy per request.
+  async setPolicy(id: string, policy: PolicyRecord): Promise<void> {
+    const e = this.entries.get(id);
+    if (!e) throw new ConnectError(`sandbox ${JSON.stringify(id)} not found`, Code.NotFound);
+    if (e.egress) {
+      e.egress.setPolicy(policy);
+      e.record.policy = e.egress.currentPolicy;
+    } else {
+      e.record.policy = validatePolicy(policy, e.record.secretNames);
+    }
+    await this.persist();
   }
 
   async destroy(id: string): Promise<void> {
@@ -161,13 +186,17 @@ export class SandboxRegistry {
   }
 }
 
+function guestEnv(e: Entry): Record<string, string> {
+  return { ...e.record.env, ...e.egress?.placeholders };
+}
+
 function snapshot(e: Entry): Sandbox {
   return create(SandboxSchema, {
     id: e.record.id,
     state: e.state,
     buildId: e.record.buildId,
     createdAt: timestampFromDate(new Date(e.record.createdAt)),
-    placeholders: {},
+    placeholders: { ...e.egress?.placeholders },
     policy: create(PolicySchema, e.record.policy),
     failure: e.failure,
   });
