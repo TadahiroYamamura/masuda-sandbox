@@ -327,6 +327,9 @@ message SandboxEvent {
   }
   message HttpRequestFinished {
     uint64 request_id = 1;
+    // HTTP status, or 0 when the request ended without a response (client
+    // closed the connection, upstream failed, request aborted). Every
+    // HttpRequestStarted is followed by exactly one HttpRequestFinished.
     uint32 status = 2;
     uint32 duration_ms = 3;
   }

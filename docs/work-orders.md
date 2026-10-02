@@ -77,6 +77,12 @@
 - **読み取り専用ディレクトリを含むイメージのビルド失敗**: Dockerfileで非rootの`go mod download`を実行したイメージを`BuildImage`すると、`gondolin build`が`EACCES /tmp/gondolin-build-XXXX`で失敗し一時ディレクトリが残る。原因を切り分け、sandbox側で直せる（例: 失敗時の一時ディレクトリを`chmod -R u+w`してから消す、OCIのexport後に権限を補正する）なら直す。Gondolin側の不具合ならupstreamへのIssueの下書きをHANDOFFに書く
 - 契約テスト: C-S1〜C-S7が緑のまま。`disk_mib`の確認は手動（`df -h /`で増えること）でよく、HANDOFFに結果を書く
 
+## S11. 応答無しで終わったHTTPリクエストの終端イベント（契約に明記済み）
+
+- `HttpRequestStarted`を出したリクエストは、応答が無く終わった場合（クライアントが接続を閉じた、上流が失敗した、中断された）も必ず`HttpRequestFinished`（`status: 0`）を出す。masudaの活動判定が「進行中」に張り付かないため（M8の実機で、応答前に切られたPOST /v1/messagesが未完了のまま残り、入力待ちが表示されなかった）
+- `inflight_http_requests`もこれで減らす。S4の「10分で捨てる」規則はこの上で保険として残す
+- 契約テスト: C-S1〜C-S7が緑のまま。単体テストで確認
+
 ## 契約テストの対応表
 
 | テスト | 項目 |
