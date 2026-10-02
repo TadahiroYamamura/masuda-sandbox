@@ -133,6 +133,7 @@ export class Egress {
   private nextRequestId = 0n;
   private readonly pending = new Map<string, { id: bigint; startedAt: number }[]>();
   private readonly recentProtocolDenials = new Map<string, number>();
+  private lastActivity: Date | undefined;
 
   constructor(decls: SecretDecl[], policy: PolicyRecord, private readonly events: EventQueue) {
     this.secrets = toSecrets(decls);
@@ -155,6 +156,16 @@ export class Egress {
 
   get currentPolicy(): PolicyRecord {
     return { allowedHosts: [...this.policy.allowedHosts], enabledSecrets: [...this.policy.enabledSecrets] };
+  }
+
+  // inflight counts what started and has not finished, minus what the
+  // PENDING_TTL_MS rule has given up on, so that a request whose response
+  // never came does not keep the sandbox looking busy forever.
+  activity(): { last: Date | undefined; inflight: number } {
+    const now = Date.now();
+    let inflight = 0;
+    for (const list of this.pending.values()) for (const p of list) if (now - p.startedAt < PENDING_TTL_MS) inflight++;
+    return { last: this.lastActivity, inflight };
   }
 
   setPolicy(p: PolicyRecord): void {
@@ -188,6 +199,7 @@ export class Egress {
   }
 
   private recordDenied(reason: DenyReason, host: string): void {
+    this.lastActivity = new Date();
     this.events.push({ case: "httpDenied", value: { host, reason } });
   }
 
@@ -246,6 +258,7 @@ export class Egress {
     list.push({ id, startedAt: now });
     this.pending.set(key, list);
     if (this.pending.size > 1000) this.prunePending(now);
+    this.lastActivity = new Date(now);
     this.events.push({ case: "httpStarted", value: { requestId: id, method, host, path } });
   }
 
@@ -262,7 +275,9 @@ export class Egress {
     const list = this.pending.get(key);
     const p = list?.shift();
     if (list && list.length === 0) this.pending.delete(key);
-    if (p) this.events.push({ case: "httpFinished", value: { requestId: p.id, status: res.status, durationMs: Date.now() - p.startedAt } });
+    if (!p) return undefined;
+    this.lastActivity = new Date();
+    this.events.push({ case: "httpFinished", value: { requestId: p.id, status: res.status, durationMs: Date.now() - p.startedAt } });
     return undefined;
   }
 }

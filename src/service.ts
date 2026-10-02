@@ -132,6 +132,9 @@ export function sandboxServiceImpl(registry: SandboxRegistry, images: ImageStore
       await registry.setPolicy(req.id, { allowedHosts: [...(req.policy?.allowedHosts ?? [])], enabledSecrets: [...(req.policy?.enabledSecrets ?? [])] });
       return create(SetPolicyResponseSchema, {});
     },
+    async *watchEvents(req, ctx) {
+      yield* registry.watchEvents(req.id, req.afterSeq, ctx.signal);
+    },
     getSandbox(req) {
       const sb = registry.get(req.id);
       if (!sb) throw new ConnectError(`sandbox ${JSON.stringify(req.id)} not found`, Code.NotFound);

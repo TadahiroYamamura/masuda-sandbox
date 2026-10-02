@@ -1,12 +1,12 @@
 import { create } from "@bufbuild/protobuf";
-import { timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { timestampFromDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import path from "node:path";
 
 import { dataDir, readJsonFile, writeJsonFile } from "./datafile.js";
 import { Egress, validatePolicy } from "./egress.js";
 import { EventQueue } from "./events.js";
-import { PolicySchema, SandboxSchema, SandboxState, type Sandbox, type SecretDecl } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
+import { PolicySchema, SandboxSchema, SandboxState, type Sandbox, type SandboxEvent, type SecretDecl } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
 import { log } from "./log.js";
 import { GuestSsh, type SshInfo } from "./ssh.js";
 import { bootVm, type GuestVm } from "./vm.js";
@@ -58,6 +58,7 @@ interface Entry {
   events: EventQueue;
   vm?: GuestVm;
   ssh?: GuestSsh;
+  monitor?: NodeJS.Timeout;
   // Settles when boot finished either way; destroy waits on it so that a VM
   // still booting is not left running behind a removed entry.
   ready: Promise<void>;
@@ -86,7 +87,9 @@ export class SandboxRegistry {
   async load(): Promise<void> {
     const parsed = await readJsonFile<Partial<SandboxesFile>>(this.file);
     for (const record of Array.isArray(parsed?.sandboxes) ? parsed.sandboxes : []) {
-      this.entries.set(record.id, { record, state: SandboxState.STOPPED, failure: "", events: new EventQueue(), ready: Promise.resolve(), destroyed: false });
+      const events = new EventQueue();
+      events.close();
+      this.entries.set(record.id, { record, state: SandboxState.STOPPED, failure: "", events, ready: Promise.resolve(), destroyed: false });
     }
   }
 
@@ -97,6 +100,12 @@ export class SandboxRegistry {
   get(id: string): Sandbox | undefined {
     const e = this.entries.get(id);
     return e && snapshot(e);
+  }
+
+  watchEvents(id: string, afterSeq: bigint, signal: AbortSignal): AsyncGenerator<SandboxEvent> {
+    const e = this.entries.get(id);
+    if (!e) throw new ConnectError(`sandbox ${JSON.stringify(id)} not found`, Code.NotFound);
+    return e.events.watch(afterSeq, signal);
   }
 
   running(id: string): RunningSandbox {
@@ -127,12 +136,14 @@ export class SandboxRegistry {
     let settle!: () => void;
     const entry: Entry = { record, state: SandboxState.STARTING, failure: "", egress, events, ready: new Promise((r) => (settle = r)), destroyed: false };
     this.entries.set(record.id, entry);
+    setState(entry, SandboxState.STARTING, "");
     try {
       await this.persist();
       entry.vm = await bootVm(record, imageDir, guestEnv(entry), egress);
       entry.ssh = new GuestSsh(entry.vm);
       if (entry.destroyed) throw new ConnectError(`sandbox ${JSON.stringify(record.id)} was destroyed while starting`, Code.Aborted);
-      entry.state = SandboxState.RUNNING;
+      setState(entry, SandboxState.RUNNING, "");
+      this.monitor(entry);
       log.info("sandbox running", { id: record.id, buildId: record.buildId, pid: entry.vm.getHostPid() });
       return snapshot(entry);
     } catch (e) {
@@ -141,6 +152,7 @@ export class SandboxRegistry {
         await this.persist().catch((pe) => log.error("persist failed", { error: pe }));
       }
       await entry.vm?.close().catch(() => {});
+      entry.events.close();
       throw e;
     } finally {
       settle();
@@ -179,6 +191,8 @@ export class SandboxRegistry {
     await this.persist();
     await e.ready;
     await closeVm(e);
+    if (e.state === SandboxState.RUNNING) setState(e, SandboxState.STOPPED, "destroyed");
+    e.events.close();
     log.info("sandbox destroyed", { id });
   }
 
@@ -190,10 +204,33 @@ export class SandboxRegistry {
       entries.map(async (e) => {
         await e.ready;
         await closeVm(e);
-        e.state = SandboxState.STOPPED;
+        if (e.state === SandboxState.RUNNING) setState(e, SandboxState.STOPPED, "service shutdown");
+        else e.state = SandboxState.STOPPED;
+        e.events.close();
       }),
     );
     return results.flatMap((r, i) => (r.status === "rejected" ? [{ id: entries[i]!.record.id, error: r.reason }] : []));
+  }
+
+  // Gondolin exposes no event for its QEMU process dying (the controller's
+  // "exit" stays internal), so the runner PID is polled. The poll is cheap and
+  // a few seconds of delay in noticing a crash is acceptable to callers.
+  private monitor(e: Entry): void {
+    e.monitor = setInterval(() => {
+      if (e.state !== SandboxState.RUNNING || !e.vm) return;
+      const pid = e.vm.getHostPid();
+      if (pid !== null && processAlive(pid)) return;
+      clearInterval(e.monitor);
+      e.monitor = undefined;
+      const detail = pid === null ? "qemu process exited" : `qemu process ${pid} exited`;
+      e.failure = detail;
+      setState(e, SandboxState.FAILED, detail);
+      log.error("sandbox failed", { id: e.record.id, detail });
+      void closeVm(e)
+        .catch((err) => log.error("closing failed sandbox failed", { id: e.record.id, error: err }))
+        .finally(() => e.events.close());
+    }, MONITOR_INTERVAL_MS);
+    e.monitor.unref();
   }
 
   // Writes are chained so that concurrent create/destroy calls cannot lose
@@ -209,8 +246,26 @@ export class SandboxRegistry {
 // in flight would open its host-side forwarder afterwards; closing GuestSsh
 // first makes that late access close itself.
 async function closeVm(e: Entry): Promise<void> {
+  clearInterval(e.monitor);
+  e.monitor = undefined;
   await e.ssh?.close().catch((err) => log.error("closing ssh access failed", { id: e.record.id, error: err }));
   if (e.vm) await e.vm.close();
+}
+
+const MONITOR_INTERVAL_MS = 5_000;
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+function setState(e: Entry, state: SandboxState, detail: string): void {
+  e.state = state;
+  e.events.push({ case: "stateChanged", value: { state, detail } });
 }
 
 function guestEnv(e: Entry): Record<string, string> {
@@ -226,5 +281,14 @@ function snapshot(e: Entry): Sandbox {
     placeholders: { ...e.egress?.placeholders },
     policy: create(PolicySchema, e.record.policy),
     failure: e.failure,
+    ...activity(e),
   });
+}
+
+function activity(e: Entry): { lastHttpActivity?: Timestamp; inflightHttpRequests: number } {
+  const a = e.egress?.activity();
+  if (!a) return { inflightHttpRequests: 0 };
+  // Nothing is in flight once the VM is gone, whatever the bookkeeping says.
+  const inflight = e.state === SandboxState.RUNNING ? a.inflight : 0;
+  return { lastHttpActivity: a.last && timestampFromDate(a.last), inflightHttpRequests: inflight };
 }
