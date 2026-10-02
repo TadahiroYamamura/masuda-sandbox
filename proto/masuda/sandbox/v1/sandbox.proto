@@ -15,6 +15,13 @@ import "google/protobuf/timestamp.proto";
 option go_package = "github.com/TadahiroYamamura/masuda-sandbox/gen/masuda/sandbox/v1;sandboxv1";
 
 service SandboxService {
+  // ---- identity -----------------------------------------------------------
+
+  // Reports the service's version and the contract it implements, so that a
+  // client can refuse to work with an incompatible service before anything
+  // else happens.
+  rpc GetServerInfo(GetServerInfoRequest) returns (ServerInfo);
+
   // ---- images -------------------------------------------------------------
 
   // Builds a guest image from a directory holding a Dockerfile. The service
@@ -69,6 +76,24 @@ service SandboxService {
   // guest makes through the policy layer (start, finish, denial) and VM state
   // changes. This is the activity signal the guest cannot fake.
   rpc WatchEvents(WatchEventsRequest) returns (stream SandboxEvent);
+}
+
+// ---- identity -----------------------------------------------------------------
+
+message GetServerInfoRequest {}
+
+message ServerInfo {
+  // Service version, e.g. "0.1.0" (the release tag without "v"); "dev" for
+  // unreleased builds.
+  string version = 1;
+  // Contract identity: the package name of this proto ("masuda.sandbox.v1")
+  // and the SHA-256 of the proto file the service was built from, so client
+  // and service can tell they share the same contract text.
+  string contract = 2;
+  string contract_sha256 = 3;
+  // Gondolin version in use and the host platform ("linux/amd64", "darwin/arm64").
+  string gondolin_version = 4;
+  string platform = 5;
 }
 
 // ---- images -----------------------------------------------------------------

@@ -90,6 +90,15 @@
 - 確認: 実機で`curl -N https://httpbin.org/stream/20`（または`/drip`）を流し、ゲスト側で最初の行が応答完了を待たずに届くこと（`curl -w '%{time_starttransfer}'`が全体時間より十分短い）。契約テストC-S1〜C-S7は緑のまま、`pnpm test`も緑
 - **PATHの約束**（契約を直した）: 既定環境のPATHに、イメージのENVがPATHを持っていても必ず`$HOME/.local/bin`を先頭に足す（native Claude Codeの置き場所。公式ubuntuイメージはENVでPATHを持つので、S10の実装だと隠れる）
 
+## S13. 配布（v0.1.0に向けて）
+
+- **`GetServerInfo`**（契約に追加済み）: `version`（ビルド時に埋める。タグ`vX.Y.Z`の`X.Y.Z`、無ければ`dev`）、`contract`/`contract_sha256`（ビルド時に`sandbox.proto`のSHA-256を埋める）、`gondolin_version`（`package.json`から）、`platform`
+- **配布物はtarball**（npm公開はv1.0以降）: esbuildで`dist/`を1ファイルに束ね（Gondolinとその依存は束ねず`dependencies`に残す。krun runnerはoptional）、`npm pack`で`masuda-sandbox-X.Y.Z.tgz`を作る。利用者は`npm install -g <tgz のURL>`で入れる。`README.md`に手順
+- **GitHub Actions `release.yml`**: タグ`v*`のpushで、`pnpm install`→`pnpm build`→単体テスト→tarball→GitHub Releaseに添付（`softprops/action-gh-release`等）、SHA-256のチェックサムも添付。契約テストはKVMが要るのでCIでは回さない（手元で回したことをリリース手順で確認する）
+- **CI `ci.yml`**: `main`/`develop`へのpushとPRで、`pnpm install`→`pnpm build`→`pnpm test`（単体のみ）
+- `masuda-sandbox --version`
+- 契約テスト: C-S1〜C-S7が緑のまま。`GetServerInfo`の単体テスト
+
 ## 契約テストの対応表
 
 | テスト | 項目 |
