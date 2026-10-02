@@ -70,6 +70,13 @@
 - サービスのメトリクス（サンドボックス数、QEMUのRSS）を`ListSandboxes`に載せない。別途ログへ
 - macOSでの動作確認はM5で行う。ここではLinux
 
+## S10. 実機1周で見つかった不足（M8の結果）
+
+- **`disk_mib`**（契約に追加済み）: `CreateSandboxRequest.disk_mib`をGondolinの`rootfs.size`に渡す。イメージに`resize2fs`が無ければ`FailedPrecondition`で理由を返す。0なら従来どおり。実機では「中身+20%+64MiB」の既定だとGo入りイメージで空きが約200MBしかなく、`go test`が`No space left on device`になった
+- **Execの既定の環境変数**: `HOME`は実行ユーザーのホーム（`getent passwd`）、`XDG_CACHE_HOME`/`XDG_CONFIG_HOME`/`XDG_DATA_HOME`は`$HOME/.cache`等（root所有の`/tmp/.cache`を非rootが書けなかった）、`PATH`に`/usr/local/bin`と`$HOME/.local/bin`を含める、Dockerイメージの`ENV`（`docker image inspect`の`Config.Env`）をExecの既定環境に引き継ぐ。リクエストの`env`はこれらを上書きする
+- **読み取り専用ディレクトリを含むイメージのビルド失敗**: Dockerfileで非rootの`go mod download`を実行したイメージを`BuildImage`すると、`gondolin build`が`EACCES /tmp/gondolin-build-XXXX`で失敗し一時ディレクトリが残る。原因を切り分け、sandbox側で直せる（例: 失敗時の一時ディレクトリを`chmod -R u+w`してから消す、OCIのexport後に権限を補正する）なら直す。Gondolin側の不具合ならupstreamへのIssueの下書きをHANDOFFに書く
+- 契約テスト: C-S1〜C-S7が緑のまま。`disk_mib`の確認は手動（`df -h /`で増えること）でよく、HANDOFFに結果を書く
+
 ## 契約テストの対応表
 
 | テスト | 項目 |

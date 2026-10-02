@@ -129,6 +129,10 @@ message CreateSandboxRequest {
   // Optional outbound SSH egress (git over ssh). Proxied by the host; the
   // guest never holds the key.
   SshEgress ssh_egress = 10;
+  // Minimum size of the writable root disk. 0 = the image's own size plus
+  // the service default headroom (which is only a few hundred MiB: build
+  // caches and test artifacts need more). The image must contain resize2fs.
+  uint32 disk_mib = 11;
 }
 
 message SecretDecl {
