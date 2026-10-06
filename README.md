@@ -34,6 +34,8 @@ masuda-sandbox --version
 masuda-sandbox serve --socket "$XDG_RUNTIME_DIR/masuda-sandbox.sock"
 ```
 
+ログはJSON Linesで、端末ではなく`$XDG_DATA_HOME/masuda-sandbox/logs/masuda-sandbox-serve.log`（未設定なら`~/.local/share/masuda-sandbox/logs/`）に書く。端末には起動したことと、ログの置き場所だけを出す。起動のたびに前のファイルを`.1`に回す（古いものは1つだけ残す）。端末に出したいときは`--log-file -`、別の場所に書くときは`--log-file <path>`。
+
 ソケットには認証が無く、ファイルの権限（0600）が境界になる。ほかに`masuda-sandbox images prune [--dry-run]`で使われていないイメージを消せる。
 
 ## 開発
