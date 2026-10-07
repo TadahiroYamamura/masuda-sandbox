@@ -106,6 +106,16 @@
 - 対処: Gondolinにゲストエージェントが無いので`Exec`で合わせる。(a) 各`Exec`の前に、ホスト時刻とゲストの`date +%s`の差が閾値（例30秒）を超えていれば`date -s @<host epoch>`をrootで打つ（コストは1 Exec分）。または(b) サービスがホストの時刻の跳び（`setInterval`の実測間隔が大きくずれた）を検知したときだけ全サンドボックスで合わせる。(b)を基本に(a)を保険にするのが妥当
 - 契約は変えない。単体テストと、実機で`date -s`が効くことの確認
 
+## S16. 使い捨てVMのジョブ（RunJob）とDeleteImage（契約に追加済み。v0.3.0）
+
+- 背景: Issue #10（masudaの特権コマンドの仕組みをsandboxへ移す）と#5（契約テストがサービスの外から資産ストアを書き換える）
+- **`RunJob`**: 1回の呼び出しで、使い捨てVMの作成→inputs（`HostFile`・`FromSandbox`）の投入→`setup_shell`→`shell`→outputsの回収→破棄。VMは成否・キャンセル・全体の期限切れのどれでも壊す。秘密・tcp_maps・sshは持たない。拒否した通信はVMの起動直後から購読し、`denied`で流して`Finished.denied_hosts`に集計する。VMのidは`job-<uuid>`で、`sandboxes.json`には書かない
+- 段取りは`src/jobs.ts`（`JobEnv`を受け取る`runJob`/`streamJob`）。VMを使わない単体テスト（`test/unit/jobs.test.ts`）で順序・前処理の失敗・失敗/キャンセル/期限切れでの破棄・outputsの一部回収を確かめる
+- globはmasudaの`internal/privileged/glob.go`と同じ意味（`src/glob.ts`、`test/unit/glob.test.ts`）
+- **`DeleteImage`**: images.jsonの記録・Gondolinの資産・BuildImageが作ったDockerのイメージを消す。使っているsandboxがあれば`FailedPrecondition`、記録の無いbuild_idは何もしない。契約テストC-S2の後片付けをこれに切り替えた
+- **CLI `masuda-sandbox run`**: ソケット経由で`RunJob`を呼ぶ。終了コードはコマンドのもの（ほかの割り当ては`masuda-sandbox run`の使い方を参照）
+- 契約テスト: C-S16（ホストのファイルの投入→加工→回収、0以外の終了と`timeout_ms`、許可していないホストの拒否、前処理の失敗、`FromSandbox`、キャンセルでVMが残らないこと、`DeleteImage`）。C-S1〜C-S7は緑のまま
+
 ## 契約テストの対応表
 
 | テスト | 項目 |
@@ -118,3 +128,4 @@
 | C-S6 | S6 |
 | C-S7 | S7 |
 | C-S8 | S8 |
+| C-S16 | S16 |

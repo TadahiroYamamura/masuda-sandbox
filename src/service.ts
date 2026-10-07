@@ -1,27 +1,24 @@
 import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { getImageObjectDirectory } from "@earendil-works/gondolin";
 import fs from "node:fs/promises";
 import path from "node:path";
 
 import { buildImage, parseArch } from "./build.js";
 import { execBaseEnv, parseImageEnv, runExec } from "./exec.js";
 import { readGuestFile, writeGuestFile } from "./files.js";
-import { DestroySandboxResponseSchema, DisableSshResponseSchema, ImageSchema, ListImagesResponseSchema, ListSandboxesResponseSchema, SandboxService, SetPolicyResponseSchema, SshAccessSchema, WriteFileResponseSchema, type CreateSandboxRequest, type Image } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
-import type { ImageRecord, ImageStore } from "./images.js";
+import { DeleteImageResponseSchema, DestroySandboxResponseSchema, DisableSshResponseSchema, ImageSchema, ListImagesResponseSchema, ListSandboxesResponseSchema, SandboxService, SetPolicyResponseSchema, SshAccessSchema, WriteFileResponseSchema, type CreateSandboxRequest, type Image } from "./gen/masuda/sandbox/v1/sandbox_pb.js";
+import { bootableImage, deleteImage, type ImageRecord, type ImageStore } from "./images.js";
+import { sandboxJobEnv, streamJob } from "./jobs.js";
 import { log } from "./log.js";
 import { ProcessError } from "./proc.js";
-import type { SandboxRecord, SandboxRegistry } from "./sandboxes.js";
+import { DEFAULT_CPUS, DEFAULT_MEMORY_MIB, type SandboxRecord, type SandboxRegistry } from "./sandboxes.js";
 import { serverInfo } from "./serverinfo.js";
 import { validateTcpMaps } from "./tcpmaps.js";
 
 function toImage(r: ImageRecord): Image {
   return create(ImageSchema, { buildId: r.buildId, name: r.name, arch: r.arch, createdAt: timestampFromDate(new Date(r.createdAt)), ociDigest: r.ociDigest });
 }
-
-const DEFAULT_MEMORY_MIB = 4096;
-const DEFAULT_CPUS = 4;
 
 function validateCreate(req: CreateSandboxRequest): void {
   if (!req.id) throw new ConnectError("id is required", Code.InvalidArgument);
@@ -51,6 +48,7 @@ function toRecord(req: CreateSandboxRequest, image: ImageRecord): SandboxRecord 
 // Methods left out of the returned object are answered with Unimplemented by
 // the Connect router.
 export function sandboxServiceImpl(registry: SandboxRegistry, images: ImageStore): Partial<ServiceImpl<typeof SandboxService>> {
+  const jobs = sandboxJobEnv(registry, images);
   return {
     getServerInfo() {
       return serverInfo();
@@ -95,6 +93,13 @@ export function sandboxServiceImpl(registry: SandboxRegistry, images: ImageStore
         throw e;
       }
     },
+    async deleteImage(req) {
+      if (!req.buildId) throw new ConnectError("build_id is required", Code.InvalidArgument);
+      const users = registry.usingImage(req.buildId);
+      if (users.length > 0) throw new ConnectError(`image ${req.buildId} is used by running sandboxes: ${users.join(", ")}`, Code.FailedPrecondition);
+      await deleteImage(images, req.buildId);
+      return create(DeleteImageResponseSchema, {});
+    },
     async listImages() {
       return create(ListImagesResponseSchema, { images: (await images.list()).map(toImage) });
     },
@@ -103,12 +108,8 @@ export function sandboxServiceImpl(registry: SandboxRegistry, images: ImageStore
     },
     async createSandbox(req) {
       validateCreate(req);
-      const image = await images.get(req.buildId);
-      if (!image) throw new ConnectError(`image ${JSON.stringify(req.buildId)} not found`, Code.NotFound);
+      const { image, imageDir } = await bootableImage(images, req.buildId);
       const record = toRecord(req, image);
-      const imageDir = getImageObjectDirectory(record.buildId);
-      const st = await fs.stat(imageDir).catch(() => undefined);
-      if (!st?.isDirectory()) throw new ConnectError(`assets for image ${record.buildId} are missing (${imageDir})`, Code.FailedPrecondition);
       try {
         return await registry.create(record, req.secrets, imageDir);
       } catch (e) {
@@ -164,6 +165,9 @@ export function sandboxServiceImpl(registry: SandboxRegistry, images: ImageStore
     },
     async *watchEvents(req, ctx) {
       yield* registry.watchEvents(req.id, req.afterSeq, ctx.signal);
+    },
+    async *runJob(req, ctx) {
+      for await (const event of streamJob(jobs, req, ctx.signal)) yield { event };
     },
     getSandbox(req) {
       const sb = registry.get(req.id);

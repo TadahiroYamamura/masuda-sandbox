@@ -1,6 +1,7 @@
 import { Code, ConnectError } from "@connectrpc/connect";
 import path from "node:path";
 
+import { baseDir, match } from "./glob.js";
 import type { GuestVm } from "./vm.js";
 
 const DEFAULT_MAX_BYTES = 64n * 1024n * 1024n;
@@ -126,4 +127,57 @@ export async function writeGuestFile(vm: GuestVm, header: WriteHeader, defaultUs
     throw e;
   }
   return written;
+}
+
+export interface GuestFileEntry {
+  rel: string;
+  mode: number;
+  size: number;
+}
+
+// 各パターンのワイルドカードを含まない先頭のディレクトリからfindし、`.git`の下は見ない。
+// findは開始点を含めてシンボリックリンクを辿らず、-type fで通常ファイルだけを返すので、
+// rootの外を指すリンクの先は読まない。
+const LIST = `cd -- "$1" 2>/dev/null || exit 3
+shift
+for b in "$@"; do
+  [ -e "$b" ] || continue
+  find "$b" -name .git -prune -o -type f -printf '%m %s %p\\0'
+done`;
+
+export async function listGuestFiles(vm: GuestVm, root: string, patterns: readonly string[], signal: AbortSignal): Promise<GuestFileEntry[]> {
+  if (patterns.length === 0) return [];
+  const dir = guestDir(root);
+  const bases = [...new Set(patterns.map(baseDir))].sort();
+  const r = await sh(vm, LIST, [dir, ...bases], signal);
+  if (r.exitCode === 3) throw new ConnectError(`${dir} is not a directory in the guest`, Code.FailedPrecondition);
+  if (r.exitCode !== 0) throw new ConnectError(`listing files under ${dir}: ${r.stderr.trim()}`, Code.Internal);
+  return selectFiles(r.stdout, patterns);
+}
+
+export function selectFiles(out: string, patterns: readonly string[]): GuestFileEntry[] {
+  const seen = new Set<string>();
+  const files: GuestFileEntry[] = [];
+  for (const rec of out.split("\0")) {
+    const m = /^([0-7]+) (\d+) (.+)$/s.exec(rec);
+    if (!m) continue;
+    const rel = path.posix.normalize(m[3]!).replace(/^\.\//, "");
+    if (seen.has(rel) || rel === "." || rel.startsWith("/") || rel === ".." || rel.startsWith("../")) continue;
+    if (!patterns.some((p) => match(p, rel))) continue;
+    seen.add(rel);
+    files.push({ rel, mode: parseInt(m[1]!, 8) & 0o777, size: Number(m[2]) });
+  }
+  return files.sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+}
+
+export function guestDir(p: string): string {
+  if (!p.startsWith("/") || p.includes("\0")) throw new ConnectError(`path must be an absolute guest path: ${JSON.stringify(p)}`, Code.InvalidArgument);
+  return path.posix.normalize(p).replace(/(.)\/$/, "$1");
+}
+
+export async function ensureGuestDir(vm: GuestVm, dir: string, owner: string, signal: AbortSignal): Promise<void> {
+  const d = guestDir(dir);
+  if (!USER_NAME.test(owner)) throw new ConnectError(`invalid owner ${JSON.stringify(owner)}`, Code.InvalidArgument);
+  const r = await sh(vm, '[ -d "$1" ] && exit 0; mkdir -p -- "$1" && chown -- "$2": "$1"', [d, owner], signal);
+  if (r.exitCode !== 0) throw new ConnectError(`creating ${d}: ${r.stderr.trim()}`, Code.FailedPrecondition);
 }

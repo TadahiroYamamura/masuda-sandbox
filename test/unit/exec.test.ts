@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { execBaseEnv, guestArgv, lookupHome, parseImageEnv, serviceDefaultEnv, type ExecSpec } from "../../src/exec.js";
+import { execBaseEnv, guestArgv, guestTimedOut, lookupHome, parseImageEnv, serviceDefaultEnv, type ExecSpec } from "../../src/exec.js";
 import type { GuestVm } from "../../src/vm.js";
 
 const spec = (s: Partial<ExecSpec>): ExecSpec => ({ argv: [], shell: "", user: "", cwd: "", env: {}, stdin: new Uint8Array(), pty: false, timeoutMs: 0, ...s });
@@ -93,5 +93,18 @@ describe("default exec environment", () => {
     expect(await lookupHome(vm, "nobody-here")).toBeUndefined();
     expect(await lookupHome(vm, "-x")).toBeUndefined();
     expect(calls).toHaveLength(2);
+  });
+});
+
+describe("guestTimedOut", () => {
+  it.each([
+    ["期限どおりにKILLで終わったら時間切れとする", 1500, 1660, 137, "SIGKILL", true],
+    ["ゲストの時計が速く、ホストの経過時間が期限より短くても時間切れとする（実機で測った値）", 1500, 1165, 137, "SIGKILL", true],
+    ["--foregroundのtimeoutが124で終わったら時間切れとする", 1500, 1600, 124, "", true],
+    ["期限の半分より前にKILLで終わったものは時間切れとしない（OOM killer等）", 1500, 700, 137, "SIGKILL", false],
+    ["期限を過ぎても普通に終わったものは時間切れとしない", 1500, 2000, 0, "", false],
+    ["期限が無ければ時間切れとしない", 0, 5000, 137, "SIGKILL", false],
+  ])("%s", (_name, timeoutMs, elapsed, exitCode, signal, want) => {
+    expect(guestTimedOut(timeoutMs, elapsed, exitCode, signal)).toBe(want);
   });
 });

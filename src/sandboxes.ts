@@ -71,6 +71,9 @@ interface Entry {
   // still booting is not left running behind a removed entry.
   ready: Promise<void>;
   destroyed: boolean;
+  // sandboxes.jsonに書かない。RunJobのVMはそれを作ったRunJobの呼び出しの中でしか意味が
+  // 無く、サービスが落ちた後にSTOPPEDとして見せるものが無いため。
+  ephemeral: boolean;
 }
 
 export interface RunningSandbox {
@@ -81,6 +84,9 @@ export interface RunningSandbox {
   env: Record<string, string>;
   home(user: string, signal?: AbortSignal): Promise<string | undefined>;
 }
+
+export const DEFAULT_MEMORY_MIB = 4096;
+export const DEFAULT_CPUS = 4;
 
 export function defaultSandboxesPath(): string {
   return path.join(dataDir(), "sandboxes.json");
@@ -99,7 +105,7 @@ export class SandboxRegistry {
     for (const record of Array.isArray(parsed?.sandboxes) ? parsed.sandboxes : []) {
       const events = new EventQueue();
       events.close();
-      this.entries.set(record.id, { record, state: SandboxState.STOPPED, failure: "", events, execSlots: new ExecSlots(), homes: new Map(), ready: Promise.resolve(), destroyed: false });
+      this.entries.set(record.id, { record, state: SandboxState.STOPPED, failure: "", events, execSlots: new ExecSlots(), homes: new Map(), ready: Promise.resolve(), destroyed: false, ephemeral: false });
     }
   }
 
@@ -110,6 +116,12 @@ export class SandboxRegistry {
   get(id: string): Sandbox | undefined {
     const e = this.entries.get(id);
     return e && snapshot(e);
+  }
+
+  usingImage(buildId: string): string[] {
+    return [...this.entries.values()]
+      .filter((e) => e.record.buildId === buildId && (e.state === SandboxState.STARTING || e.state === SandboxState.RUNNING))
+      .map((e) => e.record.id);
   }
 
   metrics(): { total: number; vms: { id: string; pid: number | null; execs: number }[] } {
@@ -148,7 +160,7 @@ export class SandboxRegistry {
 
   // A STOPPED or FAILED record with the same id is replaced: the contract only
   // requires uniqueness among live sandboxes, and masuda reuses workspace ids.
-  async create(record: SandboxRecord, secrets: SecretDecl[], imageDir: string): Promise<Sandbox> {
+  async create(record: SandboxRecord, secrets: SecretDecl[], imageDir: string, opts: { ephemeral?: boolean } = {}): Promise<Sandbox> {
     const prev = this.entries.get(record.id);
     if (prev && (prev.state === SandboxState.STARTING || prev.state === SandboxState.RUNNING)) {
       throw new ConnectError(`sandbox ${JSON.stringify(record.id)} already exists`, Code.AlreadyExists);
@@ -160,7 +172,7 @@ export class SandboxRegistry {
     const egress = new Egress(secrets, record.policy, events);
     record.policy = egress.currentPolicy;
     let settle!: () => void;
-    const entry: Entry = { record, state: SandboxState.STARTING, failure: "", egress, events, execSlots: new ExecSlots(), homes: new Map(), ready: new Promise((r) => (settle = r)), destroyed: false };
+    const entry: Entry = { record, state: SandboxState.STARTING, failure: "", egress, events, execSlots: new ExecSlots(), homes: new Map(), ready: new Promise((r) => (settle = r)), destroyed: false, ephemeral: opts.ephemeral ?? false };
     this.entries.set(record.id, entry);
     setState(entry, SandboxState.STARTING, "");
     try {
@@ -262,7 +274,7 @@ export class SandboxRegistry {
   // Writes are chained so that concurrent create/destroy calls cannot lose
   // each other's change through interleaved read-modify-write.
   private persist(): Promise<void> {
-    const op = this.queue.then(() => writeJsonFile(this.file, { sandboxes: [...this.entries.values()].map((e) => e.record) } satisfies SandboxesFile));
+    const op = this.queue.then(() => writeJsonFile(this.file, { sandboxes: [...this.entries.values()].filter((e) => !e.ephemeral).map((e) => e.record) } satisfies SandboxesFile));
     this.queue = op.catch(() => {});
     return op;
   }

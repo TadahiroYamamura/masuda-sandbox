@@ -38,6 +38,18 @@ masuda-sandbox serve --socket "$XDG_RUNTIME_DIR/masuda-sandbox.sock"
 
 ソケットには認証が無く、ファイルの権限（0600）が境界になる。ほかに`masuda-sandbox images prune [--dry-run]`で使われていないイメージを消せる。
 
+### 使い捨てのVMで1つのコマンドを動かす
+
+動いているサービスに対して、`RunJob`（VMの作成→ファイルの投入→実行→回収→破棄）を呼ぶ。通信先は`--allow-host`で許したものだけで、許していない通信先は最後に一覧する。
+
+```sh
+masuda-sandbox run --socket "$XDG_RUNTIME_DIR/masuda-sandbox.sock" --build-id <build id> \
+  --input ./package.json:/workspace/package.json --allow-host registry.npmjs.org \
+  --outputs 'dist/**' --out ./out --timeout 600 -- 'npm install && npm run build'
+```
+
+`--`より後ろはスペースでつないで`/bin/sh -lc`に渡す。ユーザーの既定は`root`、作業ディレクトリの既定は`/workspace`。ほかのフラグ（`--setup`・`--from-sandbox`・`--env`等）と終了コードの割り当ては`masuda-sandbox run`を引数なしで実行すると出る。
+
 ## 開発
 
 [`CLAUDE.md`](CLAUDE.md)を参照。リリース手順は[`docs/release.md`](docs/release.md)。

@@ -7,10 +7,11 @@ import { dataDir } from "./datafile.js";
 import { ImageStore } from "./images.js";
 import { log, loggingToFile, logToFile } from "./log.js";
 import { applyPrune, formatBytes, planPrune } from "./prune.js";
+import { runCommand } from "./run.js";
 import { serve } from "./server.js";
 import { VERSION } from "./version.js";
 
-const usage = "usage: masuda-sandbox serve --socket <path> [--log-file <path>|-]\n       masuda-sandbox images prune [--dry-run]\n       masuda-sandbox --version";
+const usage = "usage: masuda-sandbox serve --socket <path> [--log-file <path>|-]\n       masuda-sandbox run --socket <path> --build-id <id> [options] -- <shell command>\n       masuda-sandbox images prune [--dry-run]\n       masuda-sandbox --version";
 
 async function imagesPrune(dryRun: boolean): Promise<void> {
   const images = new ImageStore();
@@ -43,6 +44,11 @@ async function main(argv: string[]): Promise<void> {
       process.stderr.write(`masuda-sandbox: serving on ${path.resolve(values.socket)}\n`);
       if (logged) process.stderr.write(`masuda-sandbox: logs: ${file}\n`);
       return;
+    }
+    case "run": {
+      // クライアントのHTTP/2のセッションが残っていても、ここで終わる。
+      // 出力はrunCommandの中でdrainを待って書き終えている。
+      process.exit(await runCommand(rest));
     }
     case "images": {
       const [sub, ...flags] = rest;

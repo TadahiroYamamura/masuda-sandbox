@@ -21,7 +21,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file masuda/sandbox/v1/sandbox.proto.
  */
 export const file_masuda_sandbox_v1_sandbox: GenFile = /*@__PURE__*/
-  fileDesc("Ch9tYXN1ZGEvc2FuZGJveC92MS9zYW5kYm94LnByb3RvEhFtYXN1ZGEuc2FuZGJveC52MSIWChRHZXRTZXJ2ZXJJbmZvUmVxdWVzdCJ0CgpTZXJ2ZXJJbmZvEg8KB3ZlcnNpb24YASABKAkSEAoIY29udHJhY3QYAiABKAkSFwoPY29udHJhY3Rfc2hhMjU2GAMgASgJEhgKEGdvbmRvbGluX3ZlcnNpb24YBCABKAkSEAoIcGxhdGZvcm0YBSABKAkiWAoRQnVpbGRJbWFnZVJlcXVlc3QSEwoLY29udGV4dF9kaXIYASABKAkSEgoKZG9ja2VyZmlsZRgCIAEoCRIMCgRuYW1lGAMgASgJEgwKBGFyY2gYBCABKAkiWQoPQnVpbGRJbWFnZUV2ZW50EhIKCGxvZ19saW5lGAEgASgJSAASKQoFYnVpbHQYAiABKAsyGC5tYXN1ZGEuc2FuZGJveC52MS5JbWFnZUgAQgcKBWV2ZW50InkKBUltYWdlEhAKCGJ1aWxkX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSDAoEYXJjaBgDIAEoCRIuCgpjcmVhdGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBISCgpvY2lfZGlnZXN0GAUgASgJIhMKEUxpc3RJbWFnZXNSZXF1ZXN0Ij4KEkxpc3RJbWFnZXNSZXNwb25zZRIoCgZpbWFnZXMYASADKAsyGC5tYXN1ZGEuc2FuZGJveC52MS5JbWFnZSKjAwoUQ3JlYXRlU2FuZGJveFJlcXVlc3QSCgoCaWQYASABKAkSEAoIYnVpbGRfaWQYAiABKAkSEgoKbWVtb3J5X21pYhgDIAEoDRIMCgRjcHVzGAQgASgNEhQKDGRlZmF1bHRfdXNlchgFIAEoCRI9CgNlbnYYBiADKAsyMC5tYXN1ZGEuc2FuZGJveC52MS5DcmVhdGVTYW5kYm94UmVxdWVzdC5FbnZFbnRyeRIuCgdzZWNyZXRzGAcgAygLMh0ubWFzdWRhLnNhbmRib3gudjEuU2VjcmV0RGVjbBIpCgZwb2xpY3kYCCABKAsyGS5tYXN1ZGEuc2FuZGJveC52MS5Qb2xpY3kSKwoIdGNwX21hcHMYCSADKAsyGS5tYXN1ZGEuc2FuZGJveC52MS5UY3BNYXASMAoKc3NoX2VncmVzcxgKIAEoCzIcLm1hc3VkYS5zYW5kYm94LnYxLlNzaEVncmVzcxIQCghkaXNrX21pYhgLIAEoDRoqCghFbnZFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIqgBCgpTZWNyZXREZWNsEgwKBG5hbWUYASABKAkSDQoFdmFsdWUYAiABKAkSDQoFaG9zdHMYAyADKAkSNgoNc3Vic3RpdHV0ZV9pbhgEIAMoDjIfLm1hc3VkYS5zYW5kYm94LnYxLlN1YnN0aXR1dGVJbhIaChJwbGFjZWhvbGRlcl9wcmVmaXgYBSABKAkSGgoScGxhY2Vob2xkZXJfbGVuZ3RoGAYgASgNIjgKBlBvbGljeRIVCg1hbGxvd2VkX2hvc3RzGAEgAygJEhcKD2VuYWJsZWRfc2VjcmV0cxgCIAMoCSI2CgZUY3BNYXASDAoEaG9zdBgBIAEoCRIMCgRwb3J0GAIgASgNEhAKCHVwc3RyZWFtGAMgASgJIm0KCVNzaEVncmVzcxIVCg1hbGxvd2VkX2hvc3RzGAEgAygJEhQKDGFnZW50X3NvY2tldBgCIAEoCRIYChBrbm93bl9ob3N0c19maWxlGAMgASgJEhkKEXB1c2hfYWxsb3dlZF9yZWZzGAQgAygJIpQDCgdTYW5kYm94EgoKAmlkGAEgASgJEi4KBXN0YXRlGAIgASgOMh8ubWFzdWRhLnNhbmRib3gudjEuU2FuZGJveFN0YXRlEhAKCGJ1aWxkX2lkGAMgASgJEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEkIKDHBsYWNlaG9sZGVycxgFIAMoCzIsLm1hc3VkYS5zYW5kYm94LnYxLlNhbmRib3guUGxhY2Vob2xkZXJzRW50cnkSKQoGcG9saWN5GAYgASgLMhkubWFzdWRhLnNhbmRib3gudjEuUG9saWN5EjYKEmxhc3RfaHR0cF9hY3Rpdml0eRgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASHgoWaW5mbGlnaHRfaHR0cF9yZXF1ZXN0cxgIIAEoDRIPCgdmYWlsdXJlGAkgASgJGjMKEVBsYWNlaG9sZGVyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiHwoRR2V0U2FuZGJveFJlcXVlc3QSCgoCaWQYASABKAkiFgoUTGlzdFNhbmRib3hlc1JlcXVlc3QiRgoVTGlzdFNhbmRib3hlc1Jlc3BvbnNlEi0KCXNhbmRib3hlcxgBIAMoCzIaLm1hc3VkYS5zYW5kYm94LnYxLlNhbmRib3giIwoVRGVzdHJveVNhbmRib3hSZXF1ZXN0EgoKAmlkGAEgASgJIhgKFkRlc3Ryb3lTYW5kYm94UmVzcG9uc2UiSQoQU2V0UG9saWN5UmVxdWVzdBIKCgJpZBgBIAEoCRIpCgZwb2xpY3kYAiABKAsyGS5tYXN1ZGEuc2FuZGJveC52MS5Qb2xpY3kiEwoRU2V0UG9saWN5UmVzcG9uc2Ui4wEKC0V4ZWNSZXF1ZXN0EgoKAmlkGAEgASgJEgwKBGFyZ3YYAiADKAkSDQoFc2hlbGwYAyABKAkSDAoEdXNlchgEIAEoCRILCgNjd2QYBSABKAkSNAoDZW52GAYgAygLMicubWFzdWRhLnNhbmRib3gudjEuRXhlY1JlcXVlc3QuRW52RW50cnkSDQoFc3RkaW4YByABKAwSCwoDcHR5GAggASgIEhIKCnRpbWVvdXRfbXMYCSABKA0aKgoIRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLzAQoJRXhlY0V2ZW50EjcKB3N0YXJ0ZWQYASABKAsyJC5tYXN1ZGEuc2FuZGJveC52MS5FeGVjRXZlbnQuU3RhcnRlZEgAEhAKBnN0ZG91dBgCIAEoDEgAEhAKBnN0ZGVychgDIAEoDEgAEjUKBmV4aXRlZBgEIAEoCzIjLm1hc3VkYS5zYW5kYm94LnYxLkV4ZWNFdmVudC5FeGl0ZWRIABoJCgdTdGFydGVkGj4KBkV4aXRlZBIRCglleGl0X2NvZGUYASABKAUSDgoGc2lnbmFsGAIgASgJEhEKCXRpbWVkX291dBgDIAEoCEIHCgVldmVudCIsChBFbmFibGVTc2hSZXF1ZXN0EgoKAmlkGAEgASgJEgwKBHVzZXIYAiABKAkiYAoJU3NoQWNjZXNzEgwKBGhvc3QYASABKAkSDAoEcG9ydBgCIAEoDRIMCgR1c2VyGAMgASgJEhcKD3ByaXZhdGVfa2V5X3BlbRgEIAEoDBIQCghzc2hfYXJndhgFIAMoCSItChFEaXNhYmxlU3NoUmVxdWVzdBIKCgJpZBgBIAEoCRIMCgR1c2VyGAIgASgJIhQKEkRpc2FibGVTc2hSZXNwb25zZSI+Cg9SZWFkRmlsZVJlcXVlc3QSCgoCaWQYASABKAkSDAoEcGF0aBgCIAEoCRIRCgltYXhfYnl0ZXMYAyABKAQiGQoJRmlsZUNodW5rEgwKBGRhdGEYASABKAwiqAEKEFdyaXRlRmlsZVJlcXVlc3QSPAoGaGVhZGVyGAEgASgLMioubWFzdWRhLnNhbmRib3gudjEuV3JpdGVGaWxlUmVxdWVzdC5IZWFkZXJIABIOCgRkYXRhGAIgASgMSAAaPwoGSGVhZGVyEgoKAmlkGAEgASgJEgwKBHBhdGgYAiABKAkSDAoEbW9kZRgDIAEoDRINCgVvd25lchgEIAEoCUIFCgNtc2ciKgoRV3JpdGVGaWxlUmVzcG9uc2USFQoNYnl0ZXNfd3JpdHRlbhgBIAEoBCIzChJXYXRjaEV2ZW50c1JlcXVlc3QSCgoCaWQYASABKAkSEQoJYWZ0ZXJfc2VxGAIgASgEIqIFCgxTYW5kYm94RXZlbnQSCwoDc2VxGAEgASgEEigKBHRpbWUYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEkoKDGh0dHBfc3RhcnRlZBgDIAEoCzIyLm1hc3VkYS5zYW5kYm94LnYxLlNhbmRib3hFdmVudC5IdHRwUmVxdWVzdFN0YXJ0ZWRIABJMCg1odHRwX2ZpbmlzaGVkGAQgASgLMjMubWFzdWRhLnNhbmRib3gudjEuU2FuZGJveEV2ZW50Lkh0dHBSZXF1ZXN0RmluaXNoZWRIABJICgtodHRwX2RlbmllZBgFIAEoCzIxLm1hc3VkYS5zYW5kYm94LnYxLlNhbmRib3hFdmVudC5IdHRwUmVxdWVzdERlbmllZEgAEkUKDXN0YXRlX2NoYW5nZWQYBiABKAsyLC5tYXN1ZGEuc2FuZGJveC52MS5TYW5kYm94RXZlbnQuU3RhdGVDaGFuZ2VkSAAaVAoSSHR0cFJlcXVlc3RTdGFydGVkEhIKCnJlcXVlc3RfaWQYASABKAQSDgoGbWV0aG9kGAIgASgJEgwKBGhvc3QYAyABKAkSDAoEcGF0aBgEIAEoCRpOChNIdHRwUmVxdWVzdEZpbmlzaGVkEhIKCnJlcXVlc3RfaWQYASABKAQSDgoGc3RhdHVzGAIgASgNEhMKC2R1cmF0aW9uX21zGAMgASgNGjEKEUh0dHBSZXF1ZXN0RGVuaWVkEgwKBGhvc3QYASABKAkSDgoGcmVhc29uGAIgASgJGk4KDFN0YXRlQ2hhbmdlZBIuCgVzdGF0ZRgBIAEoDjIfLm1hc3VkYS5zYW5kYm94LnYxLlNhbmRib3hTdGF0ZRIOCgZkZXRhaWwYAiABKAlCBwoFZXZlbnQqXwoMU3Vic3RpdHV0ZUluEh0KGVNVQlNUSVRVVEVfSU5fVU5TUEVDSUZJRUQQABIYChRTVUJTVElUVVRFX0lOX0hFQURFUhABEhYKElNVQlNUSVRVVEVfSU5fQk9EWRACKpkBCgxTYW5kYm94U3RhdGUSHQoZU0FOREJPWF9TVEFURV9VTlNQRUNJRklFRBAAEhoKFlNBTkRCT1hfU1RBVEVfU1RBUlRJTkcQARIZChVTQU5EQk9YX1NUQVRFX1JVTk5JTkcQAhIZChVTQU5EQk9YX1NUQVRFX1NUT1BQRUQQAxIYChRTQU5EQk9YX1NUQVRFX0ZBSUxFRBAEMt0JCg5TYW5kYm94U2VydmljZRJXCg1HZXRTZXJ2ZXJJbmZvEicubWFzdWRhLnNhbmRib3gudjEuR2V0U2VydmVySW5mb1JlcXVlc3QaHS5tYXN1ZGEuc2FuZGJveC52MS5TZXJ2ZXJJbmZvElgKCkJ1aWxkSW1hZ2USJC5tYXN1ZGEuc2FuZGJveC52MS5CdWlsZEltYWdlUmVxdWVzdBoiLm1hc3VkYS5zYW5kYm94LnYxLkJ1aWxkSW1hZ2VFdmVudDABElkKCkxpc3RJbWFnZXMSJC5tYXN1ZGEuc2FuZGJveC52MS5MaXN0SW1hZ2VzUmVxdWVzdBolLm1hc3VkYS5zYW5kYm94LnYxLkxpc3RJbWFnZXNSZXNwb25zZRJUCg1DcmVhdGVTYW5kYm94EicubWFzdWRhLnNhbmRib3gudjEuQ3JlYXRlU2FuZGJveFJlcXVlc3QaGi5tYXN1ZGEuc2FuZGJveC52MS5TYW5kYm94Ek4KCkdldFNhbmRib3gSJC5tYXN1ZGEuc2FuZGJveC52MS5HZXRTYW5kYm94UmVxdWVzdBoaLm1hc3VkYS5zYW5kYm94LnYxLlNhbmRib3gSYgoNTGlzdFNhbmRib3hlcxInLm1hc3VkYS5zYW5kYm94LnYxLkxpc3RTYW5kYm94ZXNSZXF1ZXN0GigubWFzdWRhLnNhbmRib3gudjEuTGlzdFNhbmRib3hlc1Jlc3BvbnNlEmUKDkRlc3Ryb3lTYW5kYm94EigubWFzdWRhLnNhbmRib3gudjEuRGVzdHJveVNhbmRib3hSZXF1ZXN0GikubWFzdWRhLnNhbmRib3gudjEuRGVzdHJveVNhbmRib3hSZXNwb25zZRJWCglTZXRQb2xpY3kSIy5tYXN1ZGEuc2FuZGJveC52MS5TZXRQb2xpY3lSZXF1ZXN0GiQubWFzdWRhLnNhbmRib3gudjEuU2V0UG9saWN5UmVzcG9uc2USRgoERXhlYxIeLm1hc3VkYS5zYW5kYm94LnYxLkV4ZWNSZXF1ZXN0GhwubWFzdWRhLnNhbmRib3gudjEuRXhlY0V2ZW50MAESTgoJRW5hYmxlU3NoEiMubWFzdWRhLnNhbmRib3gudjEuRW5hYmxlU3NoUmVxdWVzdBocLm1hc3VkYS5zYW5kYm94LnYxLlNzaEFjY2VzcxJZCgpEaXNhYmxlU3NoEiQubWFzdWRhLnNhbmRib3gudjEuRGlzYWJsZVNzaFJlcXVlc3QaJS5tYXN1ZGEuc2FuZGJveC52MS5EaXNhYmxlU3NoUmVzcG9uc2USTgoIUmVhZEZpbGUSIi5tYXN1ZGEuc2FuZGJveC52MS5SZWFkRmlsZVJlcXVlc3QaHC5tYXN1ZGEuc2FuZGJveC52MS5GaWxlQ2h1bmswARJYCglXcml0ZUZpbGUSIy5tYXN1ZGEuc2FuZGJveC52MS5Xcml0ZUZpbGVSZXF1ZXN0GiQubWFzdWRhLnNhbmRib3gudjEuV3JpdGVGaWxlUmVzcG9uc2UoARJXCgtXYXRjaEV2ZW50cxIlLm1hc3VkYS5zYW5kYm94LnYxLldhdGNoRXZlbnRzUmVxdWVzdBofLm1hc3VkYS5zYW5kYm94LnYxLlNhbmRib3hFdmVudDABQkxaSmdpdGh1Yi5jb20vVGFkYWhpcm9ZYW1hbXVyYS9tYXN1ZGEtc2FuZGJveC9nZW4vbWFzdWRhL3NhbmRib3gvdjE7c2FuZGJveHYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("Ch9tYXN1ZGEvc2FuZGJveC92MS9zYW5kYm94LnByb3RvEhFtYXN1ZGEuc2FuZGJveC52MSIWChRHZXRTZXJ2ZXJJbmZvUmVxdWVzdCJ0CgpTZXJ2ZXJJbmZvEg8KB3ZlcnNpb24YASABKAkSEAoIY29udHJhY3QYAiABKAkSFwoPY29udHJhY3Rfc2hhMjU2GAMgASgJEhgKEGdvbmRvbGluX3ZlcnNpb24YBCABKAkSEAoIcGxhdGZvcm0YBSABKAkiWAoRQnVpbGRJbWFnZVJlcXVlc3QSEwoLY29udGV4dF9kaXIYASABKAkSEgoKZG9ja2VyZmlsZRgCIAEoCRIMCgRuYW1lGAMgASgJEgwKBGFyY2gYBCABKAkiWQoPQnVpbGRJbWFnZUV2ZW50EhIKCGxvZ19saW5lGAEgASgJSAASKQoFYnVpbHQYAiABKAsyGC5tYXN1ZGEuc2FuZGJveC52MS5JbWFnZUgAQgcKBWV2ZW50InkKBUltYWdlEhAKCGJ1aWxkX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSDAoEYXJjaBgDIAEoCRIuCgpjcmVhdGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBISCgpvY2lfZGlnZXN0GAUgASgJIhMKEUxpc3RJbWFnZXNSZXF1ZXN0Ij4KEkxpc3RJbWFnZXNSZXNwb25zZRIoCgZpbWFnZXMYASADKAsyGC5tYXN1ZGEuc2FuZGJveC52MS5JbWFnZSImChJEZWxldGVJbWFnZVJlcXVlc3QSEAoIYnVpbGRfaWQYASABKAkiFQoTRGVsZXRlSW1hZ2VSZXNwb25zZSKjAwoUQ3JlYXRlU2FuZGJveFJlcXVlc3QSCgoCaWQYASABKAkSEAoIYnVpbGRfaWQYAiABKAkSEgoKbWVtb3J5X21pYhgDIAEoDRIMCgRjcHVzGAQgASgNEhQKDGRlZmF1bHRfdXNlchgFIAEoCRI9CgNlbnYYBiADKAsyMC5tYXN1ZGEuc2FuZGJveC52MS5DcmVhdGVTYW5kYm94UmVxdWVzdC5FbnZFbnRyeRIuCgdzZWNyZXRzGAcgAygLMh0ubWFzdWRhLnNhbmRib3gudjEuU2VjcmV0RGVjbBIpCgZwb2xpY3kYCCABKAsyGS5tYXN1ZGEuc2FuZGJveC52MS5Qb2xpY3kSKwoIdGNwX21hcHMYCSADKAsyGS5tYXN1ZGEuc2FuZGJveC52MS5UY3BNYXASMAoKc3NoX2VncmVzcxgKIAEoCzIcLm1hc3VkYS5zYW5kYm94LnYxLlNzaEVncmVzcxIQCghkaXNrX21pYhgLIAEoDRoqCghFbnZFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIqgBCgpTZWNyZXREZWNsEgwKBG5hbWUYASABKAkSDQoFdmFsdWUYAiABKAkSDQoFaG9zdHMYAyADKAkSNgoNc3Vic3RpdHV0ZV9pbhgEIAMoDjIfLm1hc3VkYS5zYW5kYm94LnYxLlN1YnN0aXR1dGVJbhIaChJwbGFjZWhvbGRlcl9wcmVmaXgYBSABKAkSGgoScGxhY2Vob2xkZXJfbGVuZ3RoGAYgASgNIjgKBlBvbGljeRIVCg1hbGxvd2VkX2hvc3RzGAEgAygJEhcKD2VuYWJsZWRfc2VjcmV0cxgCIAMoCSI2CgZUY3BNYXASDAoEaG9zdBgBIAEoCRIMCgRwb3J0GAIgASgNEhAKCHVwc3RyZWFtGAMgASgJIm0KCVNzaEVncmVzcxIVCg1hbGxvd2VkX2hvc3RzGAEgAygJEhQKDGFnZW50X3NvY2tldBgCIAEoCRIYChBrbm93bl9ob3N0c19maWxlGAMgASgJEhkKEXB1c2hfYWxsb3dlZF9yZWZzGAQgAygJIpQDCgdTYW5kYm94EgoKAmlkGAEgASgJEi4KBXN0YXRlGAIgASgOMh8ubWFzdWRhLnNhbmRib3gudjEuU2FuZGJveFN0YXRlEhAKCGJ1aWxkX2lkGAMgASgJEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEkIKDHBsYWNlaG9sZGVycxgFIAMoCzIsLm1hc3VkYS5zYW5kYm94LnYxLlNhbmRib3guUGxhY2Vob2xkZXJzRW50cnkSKQoGcG9saWN5GAYgASgLMhkubWFzdWRhLnNhbmRib3gudjEuUG9saWN5EjYKEmxhc3RfaHR0cF9hY3Rpdml0eRgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASHgoWaW5mbGlnaHRfaHR0cF9yZXF1ZXN0cxgIIAEoDRIPCgdmYWlsdXJlGAkgASgJGjMKEVBsYWNlaG9sZGVyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiHwoRR2V0U2FuZGJveFJlcXVlc3QSCgoCaWQYASABKAkiFgoUTGlzdFNhbmRib3hlc1JlcXVlc3QiRgoVTGlzdFNhbmRib3hlc1Jlc3BvbnNlEi0KCXNhbmRib3hlcxgBIAMoCzIaLm1hc3VkYS5zYW5kYm94LnYxLlNhbmRib3giIwoVRGVzdHJveVNhbmRib3hSZXF1ZXN0EgoKAmlkGAEgASgJIhgKFkRlc3Ryb3lTYW5kYm94UmVzcG9uc2UiSQoQU2V0UG9saWN5UmVxdWVzdBIKCgJpZBgBIAEoCRIpCgZwb2xpY3kYAiABKAsyGS5tYXN1ZGEuc2FuZGJveC52MS5Qb2xpY3kiEwoRU2V0UG9saWN5UmVzcG9uc2Ui4wEKC0V4ZWNSZXF1ZXN0EgoKAmlkGAEgASgJEgwKBGFyZ3YYAiADKAkSDQoFc2hlbGwYAyABKAkSDAoEdXNlchgEIAEoCRILCgNjd2QYBSABKAkSNAoDZW52GAYgAygLMicubWFzdWRhLnNhbmRib3gudjEuRXhlY1JlcXVlc3QuRW52RW50cnkSDQoFc3RkaW4YByABKAwSCwoDcHR5GAggASgIEhIKCnRpbWVvdXRfbXMYCSABKA0aKgoIRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLzAQoJRXhlY0V2ZW50EjcKB3N0YXJ0ZWQYASABKAsyJC5tYXN1ZGEuc2FuZGJveC52MS5FeGVjRXZlbnQuU3RhcnRlZEgAEhAKBnN0ZG91dBgCIAEoDEgAEhAKBnN0ZGVychgDIAEoDEgAEjUKBmV4aXRlZBgEIAEoCzIjLm1hc3VkYS5zYW5kYm94LnYxLkV4ZWNFdmVudC5FeGl0ZWRIABoJCgdTdGFydGVkGj4KBkV4aXRlZBIRCglleGl0X2NvZGUYASABKAUSDgoGc2lnbmFsGAIgASgJEhEKCXRpbWVkX291dBgDIAEoCEIHCgVldmVudCIsChBFbmFibGVTc2hSZXF1ZXN0EgoKAmlkGAEgASgJEgwKBHVzZXIYAiABKAkiYAoJU3NoQWNjZXNzEgwKBGhvc3QYASABKAkSDAoEcG9ydBgCIAEoDRIMCgR1c2VyGAMgASgJEhcKD3ByaXZhdGVfa2V5X3BlbRgEIAEoDBIQCghzc2hfYXJndhgFIAMoCSItChFEaXNhYmxlU3NoUmVxdWVzdBIKCgJpZBgBIAEoCRIMCgR1c2VyGAIgASgJIhQKEkRpc2FibGVTc2hSZXNwb25zZSI+Cg9SZWFkRmlsZVJlcXVlc3QSCgoCaWQYASABKAkSDAoEcGF0aBgCIAEoCRIRCgltYXhfYnl0ZXMYAyABKAQiGQoJRmlsZUNodW5rEgwKBGRhdGEYASABKAwiqAEKEFdyaXRlRmlsZVJlcXVlc3QSPAoGaGVhZGVyGAEgASgLMioubWFzdWRhLnNhbmRib3gudjEuV3JpdGVGaWxlUmVxdWVzdC5IZWFkZXJIABIOCgRkYXRhGAIgASgMSAAaPwoGSGVhZGVyEgoKAmlkGAEgASgJEgwKBHBhdGgYAiABKAkSDAoEbW9kZRgDIAEoDRINCgVvd25lchgEIAEoCUIFCgNtc2ciKgoRV3JpdGVGaWxlUmVzcG9uc2USFQoNYnl0ZXNfd3JpdHRlbhgBIAEoBCIzChJXYXRjaEV2ZW50c1JlcXVlc3QSCgoCaWQYASABKAkSEQoJYWZ0ZXJfc2VxGAIgASgEIqIFCgxTYW5kYm94RXZlbnQSCwoDc2VxGAEgASgEEigKBHRpbWUYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEkoKDGh0dHBfc3RhcnRlZBgDIAEoCzIyLm1hc3VkYS5zYW5kYm94LnYxLlNhbmRib3hFdmVudC5IdHRwUmVxdWVzdFN0YXJ0ZWRIABJMCg1odHRwX2ZpbmlzaGVkGAQgASgLMjMubWFzdWRhLnNhbmRib3gudjEuU2FuZGJveEV2ZW50Lkh0dHBSZXF1ZXN0RmluaXNoZWRIABJICgtodHRwX2RlbmllZBgFIAEoCzIxLm1hc3VkYS5zYW5kYm94LnYxLlNhbmRib3hFdmVudC5IdHRwUmVxdWVzdERlbmllZEgAEkUKDXN0YXRlX2NoYW5nZWQYBiABKAsyLC5tYXN1ZGEuc2FuZGJveC52MS5TYW5kYm94RXZlbnQuU3RhdGVDaGFuZ2VkSAAaVAoSSHR0cFJlcXVlc3RTdGFydGVkEhIKCnJlcXVlc3RfaWQYASABKAQSDgoGbWV0aG9kGAIgASgJEgwKBGhvc3QYAyABKAkSDAoEcGF0aBgEIAEoCRpOChNIdHRwUmVxdWVzdEZpbmlzaGVkEhIKCnJlcXVlc3RfaWQYASABKAQSDgoGc3RhdHVzGAIgASgNEhMKC2R1cmF0aW9uX21zGAMgASgNGjEKEUh0dHBSZXF1ZXN0RGVuaWVkEgwKBGhvc3QYASABKAkSDgoGcmVhc29uGAIgASgJGk4KDFN0YXRlQ2hhbmdlZBIuCgVzdGF0ZRgBIAEoDjIfLm1hc3VkYS5zYW5kYm94LnYxLlNhbmRib3hTdGF0ZRIOCgZkZXRhaWwYAiABKAlCBwoFZXZlbnQihgYKDVJ1bkpvYlJlcXVlc3QSEAoIYnVpbGRfaWQYASABKAkSEgoKbWVtb3J5X21pYhgCIAEoDRIMCgRjcHVzGAMgASgNEhAKCGRpc2tfbWliGAQgASgNEhUKDWFsbG93ZWRfaG9zdHMYBSADKAkSDAoEdXNlchgGIAEoCRILCgNjd2QYByABKAkSNgoDZW52GAggAygLMikubWFzdWRhLnNhbmRib3gudjEuUnVuSm9iUmVxdWVzdC5FbnZFbnRyeRITCgtzZXR1cF9zaGVsbBgJIAEoCRINCgVzaGVsbBgKIAEoCRISCgp0aW1lb3V0X21zGAsgASgNEhYKDmpvYl90aW1lb3V0X21zGAwgASgNEjYKBmlucHV0cxgNIAMoCzImLm1hc3VkYS5zYW5kYm94LnYxLlJ1bkpvYlJlcXVlc3QuSW5wdXQSDwoHb3V0cHV0cxgOIAMoCRIYChBvdXRwdXRzX2hvc3RfZGlyGA8gASgJEh0KFW1heF9vdXRwdXRfZmlsZV9ieXRlcxgQIAEoBBIeChZtYXhfb3V0cHV0X3RvdGFsX2J5dGVzGBEgASgEGioKCEVudkVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEalwEKBUlucHV0Ej4KCWhvc3RfZmlsZRgBIAEoCzIpLm1hc3VkYS5zYW5kYm94LnYxLlJ1bkpvYlJlcXVlc3QuSG9zdEZpbGVIABJECgxmcm9tX3NhbmRib3gYAiABKAsyLC5tYXN1ZGEuc2FuZGJveC52MS5SdW5Kb2JSZXF1ZXN0LkZyb21TYW5kYm94SABCCAoGc291cmNlGj8KCEhvc3RGaWxlEhEKCWhvc3RfcGF0aBgBIAEoCRISCgpndWVzdF9wYXRoGAIgASgJEgwKBG1vZGUYAyABKA0aTAoLRnJvbVNhbmRib3gSCgoCaWQYASABKAkSDAoEcm9vdBgCIAEoCRIQCghwYXR0ZXJucxgDIAMoCRIRCglkZXN0X3Jvb3QYBCABKAkizwQKC1J1bkpvYkV2ZW50EjUKBXBoYXNlGAEgASgLMiQubWFzdWRhLnNhbmRib3gudjEuUnVuSm9iRXZlbnQuUGhhc2VIABIQCgZzdGRvdXQYAiABKAxIABIQCgZzdGRlcnIYAyABKAxIABJDCgZkZW5pZWQYBCABKAsyMS5tYXN1ZGEuc2FuZGJveC52MS5TYW5kYm94RXZlbnQuSHR0cFJlcXVlc3REZW5pZWRIABI7CghmaW5pc2hlZBgFIAEoCzInLm1hc3VkYS5zYW5kYm94LnYxLlJ1bkpvYkV2ZW50LkZpbmlzaGVkSAAaKQoFUGhhc2USDAoEbmFtZRgBIAEoCRISCgpzYW5kYm94X2lkGAIgASgJGvMBCghGaW5pc2hlZBIyCgVzZXR1cBgBIAEoCzIjLm1hc3VkYS5zYW5kYm94LnYxLkV4ZWNFdmVudC5FeGl0ZWQSMwoGZXhpdGVkGAIgASgLMiMubWFzdWRhLnNhbmRib3gudjEuRXhlY0V2ZW50LkV4aXRlZBIVCg1qb2JfdGltZWRfb3V0GAMgASgIEg8KB291dHB1dHMYBCADKAkSFQoNb3V0cHV0c19lcnJvchgFIAEoCRI/CgxkZW5pZWRfaG9zdHMYBiADKAsyKS5tYXN1ZGEuc2FuZGJveC52MS5SdW5Kb2JFdmVudC5EZW5pZWRIb3N0GjkKCkRlbmllZEhvc3QSDAoEaG9zdBgBIAEoCRIOCgZyZWFzb24YAiABKAkSDQoFY291bnQYAyABKA1CBwoFZXZlbnQqXwoMU3Vic3RpdHV0ZUluEh0KGVNVQlNUSVRVVEVfSU5fVU5TUEVDSUZJRUQQABIYChRTVUJTVElUVVRFX0lOX0hFQURFUhABEhYKElNVQlNUSVRVVEVfSU5fQk9EWRACKpkBCgxTYW5kYm94U3RhdGUSHQoZU0FOREJPWF9TVEFURV9VTlNQRUNJRklFRBAAEhoKFlNBTkRCT1hfU1RBVEVfU1RBUlRJTkcQARIZChVTQU5EQk9YX1NUQVRFX1JVTk5JTkcQAhIZChVTQU5EQk9YX1NUQVRFX1NUT1BQRUQQAxIYChRTQU5EQk9YX1NUQVRFX0ZBSUxFRBAEMokLCg5TYW5kYm94U2VydmljZRJXCg1HZXRTZXJ2ZXJJbmZvEicubWFzdWRhLnNhbmRib3gudjEuR2V0U2VydmVySW5mb1JlcXVlc3QaHS5tYXN1ZGEuc2FuZGJveC52MS5TZXJ2ZXJJbmZvElgKCkJ1aWxkSW1hZ2USJC5tYXN1ZGEuc2FuZGJveC52MS5CdWlsZEltYWdlUmVxdWVzdBoiLm1hc3VkYS5zYW5kYm94LnYxLkJ1aWxkSW1hZ2VFdmVudDABElkKCkxpc3RJbWFnZXMSJC5tYXN1ZGEuc2FuZGJveC52MS5MaXN0SW1hZ2VzUmVxdWVzdBolLm1hc3VkYS5zYW5kYm94LnYxLkxpc3RJbWFnZXNSZXNwb25zZRJcCgtEZWxldGVJbWFnZRIlLm1hc3VkYS5zYW5kYm94LnYxLkRlbGV0ZUltYWdlUmVxdWVzdBomLm1hc3VkYS5zYW5kYm94LnYxLkRlbGV0ZUltYWdlUmVzcG9uc2USVAoNQ3JlYXRlU2FuZGJveBInLm1hc3VkYS5zYW5kYm94LnYxLkNyZWF0ZVNhbmRib3hSZXF1ZXN0GhoubWFzdWRhLnNhbmRib3gudjEuU2FuZGJveBJOCgpHZXRTYW5kYm94EiQubWFzdWRhLnNhbmRib3gudjEuR2V0U2FuZGJveFJlcXVlc3QaGi5tYXN1ZGEuc2FuZGJveC52MS5TYW5kYm94EmIKDUxpc3RTYW5kYm94ZXMSJy5tYXN1ZGEuc2FuZGJveC52MS5MaXN0U2FuZGJveGVzUmVxdWVzdBooLm1hc3VkYS5zYW5kYm94LnYxLkxpc3RTYW5kYm94ZXNSZXNwb25zZRJlCg5EZXN0cm95U2FuZGJveBIoLm1hc3VkYS5zYW5kYm94LnYxLkRlc3Ryb3lTYW5kYm94UmVxdWVzdBopLm1hc3VkYS5zYW5kYm94LnYxLkRlc3Ryb3lTYW5kYm94UmVzcG9uc2USVgoJU2V0UG9saWN5EiMubWFzdWRhLnNhbmRib3gudjEuU2V0UG9saWN5UmVxdWVzdBokLm1hc3VkYS5zYW5kYm94LnYxLlNldFBvbGljeVJlc3BvbnNlEkYKBEV4ZWMSHi5tYXN1ZGEuc2FuZGJveC52MS5FeGVjUmVxdWVzdBocLm1hc3VkYS5zYW5kYm94LnYxLkV4ZWNFdmVudDABEk4KCUVuYWJsZVNzaBIjLm1hc3VkYS5zYW5kYm94LnYxLkVuYWJsZVNzaFJlcXVlc3QaHC5tYXN1ZGEuc2FuZGJveC52MS5Tc2hBY2Nlc3MSWQoKRGlzYWJsZVNzaBIkLm1hc3VkYS5zYW5kYm94LnYxLkRpc2FibGVTc2hSZXF1ZXN0GiUubWFzdWRhLnNhbmRib3gudjEuRGlzYWJsZVNzaFJlc3BvbnNlEk4KCFJlYWRGaWxlEiIubWFzdWRhLnNhbmRib3gudjEuUmVhZEZpbGVSZXF1ZXN0GhwubWFzdWRhLnNhbmRib3gudjEuRmlsZUNodW5rMAESWAoJV3JpdGVGaWxlEiMubWFzdWRhLnNhbmRib3gudjEuV3JpdGVGaWxlUmVxdWVzdBokLm1hc3VkYS5zYW5kYm94LnYxLldyaXRlRmlsZVJlc3BvbnNlKAESVwoLV2F0Y2hFdmVudHMSJS5tYXN1ZGEuc2FuZGJveC52MS5XYXRjaEV2ZW50c1JlcXVlc3QaHy5tYXN1ZGEuc2FuZGJveC52MS5TYW5kYm94RXZlbnQwARJMCgZSdW5Kb2ISIC5tYXN1ZGEuc2FuZGJveC52MS5SdW5Kb2JSZXF1ZXN0Gh4ubWFzdWRhLnNhbmRib3gudjEuUnVuSm9iRXZlbnQwAUJMWkpnaXRodWIuY29tL1RhZGFoaXJvWWFtYW11cmEvbWFzdWRhLXNhbmRib3gvZ2VuL21hc3VkYS9zYW5kYm94L3YxO3NhbmRib3h2MWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message masuda.sandbox.v1.GetServerInfoRequest
@@ -223,6 +223,36 @@ export const ListImagesResponseSchema: GenMessage<ListImagesResponse> = /*@__PUR
   messageDesc(file_masuda_sandbox_v1_sandbox, 6);
 
 /**
+ * @generated from message masuda.sandbox.v1.DeleteImageRequest
+ */
+export type DeleteImageRequest = Message<"masuda.sandbox.v1.DeleteImageRequest"> & {
+  /**
+   * @generated from field: string build_id = 1;
+   */
+  buildId: string;
+};
+
+/**
+ * Describes the message masuda.sandbox.v1.DeleteImageRequest.
+ * Use `create(DeleteImageRequestSchema)` to create a new message.
+ */
+export const DeleteImageRequestSchema: GenMessage<DeleteImageRequest> = /*@__PURE__*/
+  messageDesc(file_masuda_sandbox_v1_sandbox, 7);
+
+/**
+ * @generated from message masuda.sandbox.v1.DeleteImageResponse
+ */
+export type DeleteImageResponse = Message<"masuda.sandbox.v1.DeleteImageResponse"> & {
+};
+
+/**
+ * Describes the message masuda.sandbox.v1.DeleteImageResponse.
+ * Use `create(DeleteImageResponseSchema)` to create a new message.
+ */
+export const DeleteImageResponseSchema: GenMessage<DeleteImageResponse> = /*@__PURE__*/
+  messageDesc(file_masuda_sandbox_v1_sandbox, 8);
+
+/**
  * @generated from message masuda.sandbox.v1.CreateSandboxRequest
  */
 export type CreateSandboxRequest = Message<"masuda.sandbox.v1.CreateSandboxRequest"> & {
@@ -313,7 +343,7 @@ export type CreateSandboxRequest = Message<"masuda.sandbox.v1.CreateSandboxReque
  * Use `create(CreateSandboxRequestSchema)` to create a new message.
  */
 export const CreateSandboxRequestSchema: GenMessage<CreateSandboxRequest> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 7);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 9);
 
 /**
  * @generated from message masuda.sandbox.v1.SecretDecl
@@ -363,7 +393,7 @@ export type SecretDecl = Message<"masuda.sandbox.v1.SecretDecl"> & {
  * Use `create(SecretDeclSchema)` to create a new message.
  */
 export const SecretDeclSchema: GenMessage<SecretDecl> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 8);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 10);
 
 /**
  * @generated from message masuda.sandbox.v1.Policy
@@ -390,7 +420,7 @@ export type Policy = Message<"masuda.sandbox.v1.Policy"> & {
  * Use `create(PolicySchema)` to create a new message.
  */
 export const PolicySchema: GenMessage<Policy> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 9);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 11);
 
 /**
  * @generated from message masuda.sandbox.v1.TcpMap
@@ -423,7 +453,7 @@ export type TcpMap = Message<"masuda.sandbox.v1.TcpMap"> & {
  * Use `create(TcpMapSchema)` to create a new message.
  */
 export const TcpMapSchema: GenMessage<TcpMap> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 10);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 12);
 
 /**
  * @generated from message masuda.sandbox.v1.SshEgress
@@ -461,7 +491,7 @@ export type SshEgress = Message<"masuda.sandbox.v1.SshEgress"> & {
  * Use `create(SshEgressSchema)` to create a new message.
  */
 export const SshEgressSchema: GenMessage<SshEgress> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 11);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 13);
 
 /**
  * @generated from message masuda.sandbox.v1.Sandbox
@@ -524,7 +554,7 @@ export type Sandbox = Message<"masuda.sandbox.v1.Sandbox"> & {
  * Use `create(SandboxSchema)` to create a new message.
  */
 export const SandboxSchema: GenMessage<Sandbox> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 12);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 14);
 
 /**
  * @generated from message masuda.sandbox.v1.GetSandboxRequest
@@ -541,7 +571,7 @@ export type GetSandboxRequest = Message<"masuda.sandbox.v1.GetSandboxRequest"> &
  * Use `create(GetSandboxRequestSchema)` to create a new message.
  */
 export const GetSandboxRequestSchema: GenMessage<GetSandboxRequest> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 13);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 15);
 
 /**
  * @generated from message masuda.sandbox.v1.ListSandboxesRequest
@@ -554,7 +584,7 @@ export type ListSandboxesRequest = Message<"masuda.sandbox.v1.ListSandboxesReque
  * Use `create(ListSandboxesRequestSchema)` to create a new message.
  */
 export const ListSandboxesRequestSchema: GenMessage<ListSandboxesRequest> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 14);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 16);
 
 /**
  * @generated from message masuda.sandbox.v1.ListSandboxesResponse
@@ -571,7 +601,7 @@ export type ListSandboxesResponse = Message<"masuda.sandbox.v1.ListSandboxesResp
  * Use `create(ListSandboxesResponseSchema)` to create a new message.
  */
 export const ListSandboxesResponseSchema: GenMessage<ListSandboxesResponse> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 15);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 17);
 
 /**
  * @generated from message masuda.sandbox.v1.DestroySandboxRequest
@@ -588,7 +618,7 @@ export type DestroySandboxRequest = Message<"masuda.sandbox.v1.DestroySandboxReq
  * Use `create(DestroySandboxRequestSchema)` to create a new message.
  */
 export const DestroySandboxRequestSchema: GenMessage<DestroySandboxRequest> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 16);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 18);
 
 /**
  * @generated from message masuda.sandbox.v1.DestroySandboxResponse
@@ -601,7 +631,7 @@ export type DestroySandboxResponse = Message<"masuda.sandbox.v1.DestroySandboxRe
  * Use `create(DestroySandboxResponseSchema)` to create a new message.
  */
 export const DestroySandboxResponseSchema: GenMessage<DestroySandboxResponse> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 17);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 19);
 
 /**
  * @generated from message masuda.sandbox.v1.SetPolicyRequest
@@ -623,7 +653,7 @@ export type SetPolicyRequest = Message<"masuda.sandbox.v1.SetPolicyRequest"> & {
  * Use `create(SetPolicyRequestSchema)` to create a new message.
  */
 export const SetPolicyRequestSchema: GenMessage<SetPolicyRequest> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 18);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 20);
 
 /**
  * @generated from message masuda.sandbox.v1.SetPolicyResponse
@@ -636,7 +666,7 @@ export type SetPolicyResponse = Message<"masuda.sandbox.v1.SetPolicyResponse"> &
  * Use `create(SetPolicyResponseSchema)` to create a new message.
  */
 export const SetPolicyResponseSchema: GenMessage<SetPolicyResponse> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 19);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 21);
 
 /**
  * @generated from message masuda.sandbox.v1.ExecRequest
@@ -713,7 +743,7 @@ export type ExecRequest = Message<"masuda.sandbox.v1.ExecRequest"> & {
  * Use `create(ExecRequestSchema)` to create a new message.
  */
 export const ExecRequestSchema: GenMessage<ExecRequest> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 20);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 22);
 
 /**
  * @generated from message masuda.sandbox.v1.ExecEvent
@@ -754,7 +784,7 @@ export type ExecEvent = Message<"masuda.sandbox.v1.ExecEvent"> & {
  * Use `create(ExecEventSchema)` to create a new message.
  */
 export const ExecEventSchema: GenMessage<ExecEvent> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 21);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 23);
 
 /**
  * @generated from message masuda.sandbox.v1.ExecEvent.Started
@@ -767,7 +797,7 @@ export type ExecEvent_Started = Message<"masuda.sandbox.v1.ExecEvent.Started"> &
  * Use `create(ExecEvent_StartedSchema)` to create a new message.
  */
 export const ExecEvent_StartedSchema: GenMessage<ExecEvent_Started> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 21, 0);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 23, 0);
 
 /**
  * @generated from message masuda.sandbox.v1.ExecEvent.Exited
@@ -794,7 +824,7 @@ export type ExecEvent_Exited = Message<"masuda.sandbox.v1.ExecEvent.Exited"> & {
  * Use `create(ExecEvent_ExitedSchema)` to create a new message.
  */
 export const ExecEvent_ExitedSchema: GenMessage<ExecEvent_Exited> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 21, 1);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 23, 1);
 
 /**
  * @generated from message masuda.sandbox.v1.EnableSshRequest
@@ -818,7 +848,7 @@ export type EnableSshRequest = Message<"masuda.sandbox.v1.EnableSshRequest"> & {
  * Use `create(EnableSshRequestSchema)` to create a new message.
  */
 export const EnableSshRequestSchema: GenMessage<EnableSshRequest> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 22);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 24);
 
 /**
  * @generated from message masuda.sandbox.v1.SshAccess
@@ -863,7 +893,7 @@ export type SshAccess = Message<"masuda.sandbox.v1.SshAccess"> & {
  * Use `create(SshAccessSchema)` to create a new message.
  */
 export const SshAccessSchema: GenMessage<SshAccess> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 23);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 25);
 
 /**
  * @generated from message masuda.sandbox.v1.DisableSshRequest
@@ -885,7 +915,7 @@ export type DisableSshRequest = Message<"masuda.sandbox.v1.DisableSshRequest"> &
  * Use `create(DisableSshRequestSchema)` to create a new message.
  */
 export const DisableSshRequestSchema: GenMessage<DisableSshRequest> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 24);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 26);
 
 /**
  * @generated from message masuda.sandbox.v1.DisableSshResponse
@@ -898,7 +928,7 @@ export type DisableSshResponse = Message<"masuda.sandbox.v1.DisableSshResponse">
  * Use `create(DisableSshResponseSchema)` to create a new message.
  */
 export const DisableSshResponseSchema: GenMessage<DisableSshResponse> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 25);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 27);
 
 /**
  * @generated from message masuda.sandbox.v1.ReadFileRequest
@@ -929,7 +959,7 @@ export type ReadFileRequest = Message<"masuda.sandbox.v1.ReadFileRequest"> & {
  * Use `create(ReadFileRequestSchema)` to create a new message.
  */
 export const ReadFileRequestSchema: GenMessage<ReadFileRequest> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 26);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 28);
 
 /**
  * @generated from message masuda.sandbox.v1.FileChunk
@@ -946,7 +976,7 @@ export type FileChunk = Message<"masuda.sandbox.v1.FileChunk"> & {
  * Use `create(FileChunkSchema)` to create a new message.
  */
 export const FileChunkSchema: GenMessage<FileChunk> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 27);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 29);
 
 /**
  * @generated from message masuda.sandbox.v1.WriteFileRequest
@@ -975,7 +1005,7 @@ export type WriteFileRequest = Message<"masuda.sandbox.v1.WriteFileRequest"> & {
  * Use `create(WriteFileRequestSchema)` to create a new message.
  */
 export const WriteFileRequestSchema: GenMessage<WriteFileRequest> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 28);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 30);
 
 /**
  * @generated from message masuda.sandbox.v1.WriteFileRequest.Header
@@ -1011,7 +1041,7 @@ export type WriteFileRequest_Header = Message<"masuda.sandbox.v1.WriteFileReques
  * Use `create(WriteFileRequest_HeaderSchema)` to create a new message.
  */
 export const WriteFileRequest_HeaderSchema: GenMessage<WriteFileRequest_Header> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 28, 0);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 30, 0);
 
 /**
  * @generated from message masuda.sandbox.v1.WriteFileResponse
@@ -1028,7 +1058,7 @@ export type WriteFileResponse = Message<"masuda.sandbox.v1.WriteFileResponse"> &
  * Use `create(WriteFileResponseSchema)` to create a new message.
  */
 export const WriteFileResponseSchema: GenMessage<WriteFileResponse> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 29);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 31);
 
 /**
  * @generated from message masuda.sandbox.v1.WatchEventsRequest
@@ -1053,7 +1083,7 @@ export type WatchEventsRequest = Message<"masuda.sandbox.v1.WatchEventsRequest">
  * Use `create(WatchEventsRequestSchema)` to create a new message.
  */
 export const WatchEventsRequestSchema: GenMessage<WatchEventsRequest> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 30);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 32);
 
 /**
  * @generated from message masuda.sandbox.v1.SandboxEvent
@@ -1104,7 +1134,7 @@ export type SandboxEvent = Message<"masuda.sandbox.v1.SandboxEvent"> & {
  * Use `create(SandboxEventSchema)` to create a new message.
  */
 export const SandboxEventSchema: GenMessage<SandboxEvent> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 31);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 33);
 
 /**
  * @generated from message masuda.sandbox.v1.SandboxEvent.HttpRequestStarted
@@ -1138,7 +1168,7 @@ export type SandboxEvent_HttpRequestStarted = Message<"masuda.sandbox.v1.Sandbox
  * Use `create(SandboxEvent_HttpRequestStartedSchema)` to create a new message.
  */
 export const SandboxEvent_HttpRequestStartedSchema: GenMessage<SandboxEvent_HttpRequestStarted> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 31, 0);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 33, 0);
 
 /**
  * @generated from message masuda.sandbox.v1.SandboxEvent.HttpRequestFinished
@@ -1172,7 +1202,7 @@ export type SandboxEvent_HttpRequestFinished = Message<"masuda.sandbox.v1.Sandbo
  * Use `create(SandboxEvent_HttpRequestFinishedSchema)` to create a new message.
  */
 export const SandboxEvent_HttpRequestFinishedSchema: GenMessage<SandboxEvent_HttpRequestFinished> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 31, 1);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 33, 1);
 
 /**
  * @generated from message masuda.sandbox.v1.SandboxEvent.HttpRequestDenied
@@ -1196,7 +1226,7 @@ export type SandboxEvent_HttpRequestDenied = Message<"masuda.sandbox.v1.SandboxE
  * Use `create(SandboxEvent_HttpRequestDeniedSchema)` to create a new message.
  */
 export const SandboxEvent_HttpRequestDeniedSchema: GenMessage<SandboxEvent_HttpRequestDenied> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 31, 2);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 33, 2);
 
 /**
  * @generated from message masuda.sandbox.v1.SandboxEvent.StateChanged
@@ -1218,7 +1248,430 @@ export type SandboxEvent_StateChanged = Message<"masuda.sandbox.v1.SandboxEvent.
  * Use `create(SandboxEvent_StateChangedSchema)` to create a new message.
  */
 export const SandboxEvent_StateChangedSchema: GenMessage<SandboxEvent_StateChanged> = /*@__PURE__*/
-  messageDesc(file_masuda_sandbox_v1_sandbox, 31, 3);
+  messageDesc(file_masuda_sandbox_v1_sandbox, 33, 3);
+
+/**
+ * @generated from message masuda.sandbox.v1.RunJobRequest
+ */
+export type RunJobRequest = Message<"masuda.sandbox.v1.RunJobRequest"> & {
+  /**
+   * The VM; same meaning as in CreateSandboxRequest (0 = default). A job's VM
+   * has no secrets, tcp_maps or ssh_egress.
+   *
+   * @generated from field: string build_id = 1;
+   */
+  buildId: string;
+
+  /**
+   * @generated from field: uint32 memory_mib = 2;
+   */
+  memoryMib: number;
+
+  /**
+   * @generated from field: uint32 cpus = 3;
+   */
+  cpus: number;
+
+  /**
+   * @generated from field: uint32 disk_mib = 4;
+   */
+  diskMib: number;
+
+  /**
+   * Hosts the guest may reach over HTTP/TLS, written as in
+   * Policy.allowed_hosts. Empty: nothing. Fixed for the job's life.
+   *
+   * @generated from field: repeated string allowed_hosts = 5;
+   */
+  allowedHosts: string[];
+
+  /**
+   * Guest user for setup_shell and shell. Empty = "root".
+   *
+   * @generated from field: string user = 6;
+   */
+  user: string;
+
+  /**
+   * Working directory. Empty = "/workspace". Created (owned by user) if missing.
+   *
+   * @generated from field: string cwd = 7;
+   */
+  cwd: string;
+
+  /**
+   * Environment for both setup_shell and shell, on top of the base
+   * environment described at ExecRequest.env.
+   *
+   * @generated from field: map<string, string> env = 8;
+   */
+  env: { [key: string]: string };
+
+  /**
+   * Optional preparation, run via `/bin/sh -lc` before shell with the same
+   * user, cwd and env. If it exits non-zero (or by a signal), shell is not run
+   * (outputs are still collected). Its output streams on stdout/stderr like
+   * shell's. Only job_timeout_ms bounds it.
+   *
+   * @generated from field: string setup_shell = 9;
+   */
+  setupShell: string;
+
+  /**
+   * What to run (required), via `/bin/sh -lc`.
+   *
+   * @generated from field: string shell = 10;
+   */
+  shell: string;
+
+  /**
+   * Deadline for shell; 0 = none. Same meaning as ExecRequest.timeout_ms.
+   *
+   * @generated from field: uint32 timeout_ms = 11;
+   */
+  timeoutMs: number;
+
+  /**
+   * Deadline for the whole job, from creating the VM to collecting outputs.
+   * 0 = the service default: the larger of 2 hours and timeout_ms + 30
+   * minutes. When it passes, the VM is destroyed and Finished.job_timed_out
+   * is set.
+   *
+   * @generated from field: uint32 job_timeout_ms = 12;
+   */
+  jobTimeoutMs: number;
+
+  /**
+   * Put into the VM in order, after it boots and before setup_shell.
+   *
+   * @generated from field: repeated masuda.sandbox.v1.RunJobRequest.Input inputs = 13;
+   */
+  inputs: RunJobRequest_Input[];
+
+  /**
+   * Files to collect: globs relative to cwd, with the rules of
+   * FromSandbox.patterns.
+   *
+   * @generated from field: repeated string outputs = 14;
+   */
+  outputs: string[];
+
+  /**
+   * Host directory (absolute; required with outputs) the service writes the
+   * collected files into, at their paths relative to cwd. Created if missing;
+   * existing files of the same name are overwritten. Files keep only the
+   * owner part of their guest permissions (nobody else may read them).
+   *
+   * @generated from field: string outputs_host_dir = 15;
+   */
+  outputsHostDir: string;
+
+  /**
+   * Per-file limit; 0 = 64 MiB. Larger files are skipped and reported in
+   * outputs_error.
+   *
+   * @generated from field: uint64 max_output_file_bytes = 16;
+   */
+  maxOutputFileBytes: bigint;
+
+  /**
+   * Limit for all collected files together; 0 = 1 GiB. Files beyond it are
+   * skipped and reported in outputs_error.
+   *
+   * @generated from field: uint64 max_output_total_bytes = 17;
+   */
+  maxOutputTotalBytes: bigint;
+};
+
+/**
+ * Describes the message masuda.sandbox.v1.RunJobRequest.
+ * Use `create(RunJobRequestSchema)` to create a new message.
+ */
+export const RunJobRequestSchema: GenMessage<RunJobRequest> = /*@__PURE__*/
+  messageDesc(file_masuda_sandbox_v1_sandbox, 34);
+
+/**
+ * @generated from message masuda.sandbox.v1.RunJobRequest.Input
+ */
+export type RunJobRequest_Input = Message<"masuda.sandbox.v1.RunJobRequest.Input"> & {
+  /**
+   * @generated from oneof masuda.sandbox.v1.RunJobRequest.Input.source
+   */
+  source: {
+    /**
+     * @generated from field: masuda.sandbox.v1.RunJobRequest.HostFile host_file = 1;
+     */
+    value: RunJobRequest_HostFile;
+    case: "hostFile";
+  } | {
+    /**
+     * @generated from field: masuda.sandbox.v1.RunJobRequest.FromSandbox from_sandbox = 2;
+     */
+    value: RunJobRequest_FromSandbox;
+    case: "fromSandbox";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message masuda.sandbox.v1.RunJobRequest.Input.
+ * Use `create(RunJobRequest_InputSchema)` to create a new message.
+ */
+export const RunJobRequest_InputSchema: GenMessage<RunJobRequest_Input> = /*@__PURE__*/
+  messageDesc(file_masuda_sandbox_v1_sandbox, 34, 0);
+
+/**
+ * Copies one host file into the guest. The service process reads it (the
+ * same trust in the host account as BuildImageRequest.context_dir).
+ *
+ * @generated from message masuda.sandbox.v1.RunJobRequest.HostFile
+ */
+export type RunJobRequest_HostFile = Message<"masuda.sandbox.v1.RunJobRequest.HostFile"> & {
+  /**
+   * absolute
+   *
+   * @generated from field: string host_path = 1;
+   */
+  hostPath: string;
+
+  /**
+   * absolute; missing parents are created (owned by user)
+   *
+   * @generated from field: string guest_path = 2;
+   */
+  guestPath: string;
+
+  /**
+   * 0 = 0644; owned by user
+   *
+   * @generated from field: uint32 mode = 3;
+   */
+  mode: number;
+};
+
+/**
+ * Describes the message masuda.sandbox.v1.RunJobRequest.HostFile.
+ * Use `create(RunJobRequest_HostFileSchema)` to create a new message.
+ */
+export const RunJobRequest_HostFileSchema: GenMessage<RunJobRequest_HostFile> = /*@__PURE__*/
+  messageDesc(file_masuda_sandbox_v1_sandbox, 34, 1);
+
+/**
+ * Copies the files under root that match patterns from another, RUNNING
+ * sandbox to the same relative paths under dest_root in the job's VM. The
+ * copy goes VM to VM inside the service, never through the caller.
+ *
+ * patterns are globs relative to root: `/`-separated, without `..`, `.`,
+ * empty segments or `\`. Each segment is either `*` / `?` / `[...]` (never
+ * crossing `/`) or `**`, which matches zero or more segments. A pattern
+ * naming a directory does not match the files in it (write `dir/**`).
+ * Malformed patterns are InvalidArgument.
+ *
+ * Only regular files are copied. Anything named `.git` is not descended
+ * into. Symlinks are neither followed nor copied. Permission bits (the low
+ * 9) are kept; the owner is user. A pattern matching nothing is not an
+ * error. Per-file limit: ReadFile's default (64 MiB).
+ *
+ * @generated from message masuda.sandbox.v1.RunJobRequest.FromSandbox
+ */
+export type RunJobRequest_FromSandbox = Message<"masuda.sandbox.v1.RunJobRequest.FromSandbox"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * absolute, e.g. "/workspace"
+   *
+   * @generated from field: string root = 2;
+   */
+  root: string;
+
+  /**
+   * @generated from field: repeated string patterns = 3;
+   */
+  patterns: string[];
+
+  /**
+   * absolute; empty = cwd
+   *
+   * @generated from field: string dest_root = 4;
+   */
+  destRoot: string;
+};
+
+/**
+ * Describes the message masuda.sandbox.v1.RunJobRequest.FromSandbox.
+ * Use `create(RunJobRequest_FromSandboxSchema)` to create a new message.
+ */
+export const RunJobRequest_FromSandboxSchema: GenMessage<RunJobRequest_FromSandbox> = /*@__PURE__*/
+  messageDesc(file_masuda_sandbox_v1_sandbox, 34, 2);
+
+/**
+ * @generated from message masuda.sandbox.v1.RunJobEvent
+ */
+export type RunJobEvent = Message<"masuda.sandbox.v1.RunJobEvent"> & {
+  /**
+   * @generated from oneof masuda.sandbox.v1.RunJobEvent.event
+   */
+  event: {
+    /**
+     * @generated from field: masuda.sandbox.v1.RunJobEvent.Phase phase = 1;
+     */
+    value: RunJobEvent_Phase;
+    case: "phase";
+  } | {
+    /**
+     * @generated from field: bytes stdout = 2;
+     */
+    value: Uint8Array;
+    case: "stdout";
+  } | {
+    /**
+     * @generated from field: bytes stderr = 3;
+     */
+    value: Uint8Array;
+    case: "stderr";
+  } | {
+    /**
+     * A request denied during the job. Watched from right after boot, so
+     * none is missed.
+     *
+     * @generated from field: masuda.sandbox.v1.SandboxEvent.HttpRequestDenied denied = 4;
+     */
+    value: SandboxEvent_HttpRequestDenied;
+    case: "denied";
+  } | {
+    /**
+     * @generated from field: masuda.sandbox.v1.RunJobEvent.Finished finished = 5;
+     */
+    value: RunJobEvent_Finished;
+    case: "finished";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message masuda.sandbox.v1.RunJobEvent.
+ * Use `create(RunJobEventSchema)` to create a new message.
+ */
+export const RunJobEventSchema: GenMessage<RunJobEvent> = /*@__PURE__*/
+  messageDesc(file_masuda_sandbox_v1_sandbox, 35);
+
+/**
+ * Start of a phase: "creating", "inputs", "setup" (only with setup_shell),
+ * "running", "outputs", "destroying", in that order. sandbox_id is the id
+ * the service gave the job's VM ("job-<uuid>"). The VM shows in
+ * ListSandboxes while it lives, but leaves no record once the service stops
+ * (it is not written to sandboxes.json).
+ *
+ * @generated from message masuda.sandbox.v1.RunJobEvent.Phase
+ */
+export type RunJobEvent_Phase = Message<"masuda.sandbox.v1.RunJobEvent.Phase"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string sandbox_id = 2;
+   */
+  sandboxId: string;
+};
+
+/**
+ * Describes the message masuda.sandbox.v1.RunJobEvent.Phase.
+ * Use `create(RunJobEvent_PhaseSchema)` to create a new message.
+ */
+export const RunJobEvent_PhaseSchema: GenMessage<RunJobEvent_Phase> = /*@__PURE__*/
+  messageDesc(file_masuda_sandbox_v1_sandbox, 35, 0);
+
+/**
+ * Sent once, last, after the VM was destroyed.
+ *
+ * @generated from message masuda.sandbox.v1.RunJobEvent.Finished
+ */
+export type RunJobEvent_Finished = Message<"masuda.sandbox.v1.RunJobEvent.Finished"> & {
+  /**
+   * How setup_shell ended; unset without setup_shell or if it never ran.
+   *
+   * @generated from field: masuda.sandbox.v1.ExecEvent.Exited setup = 1;
+   */
+  setup?: ExecEvent_Exited | undefined;
+
+  /**
+   * How shell ended; unset if it did not run or finish (setup_shell
+   * failed, or the job deadline passed).
+   *
+   * @generated from field: masuda.sandbox.v1.ExecEvent.Exited exited = 2;
+   */
+  exited?: ExecEvent_Exited | undefined;
+
+  /**
+   * job_timeout_ms passed and the VM was destroyed.
+   *
+   * @generated from field: bool job_timed_out = 3;
+   */
+  jobTimedOut: boolean;
+
+  /**
+   * Collected files (relative to cwd, sorted), now under outputs_host_dir.
+   *
+   * @generated from field: repeated string outputs = 4;
+   */
+  outputs: string[];
+
+  /**
+   * Patterns that matched nothing and files that could not be read or
+   * were over a limit, joined by "; ". Whatever could be read is still
+   * collected (not all-or-nothing).
+   *
+   * @generated from field: string outputs_error = 5;
+   */
+  outputsError: string;
+
+  /**
+   * Requests denied during the job, counted per (host, reason), in the
+   * order first seen.
+   *
+   * @generated from field: repeated masuda.sandbox.v1.RunJobEvent.DeniedHost denied_hosts = 6;
+   */
+  deniedHosts: RunJobEvent_DeniedHost[];
+};
+
+/**
+ * Describes the message masuda.sandbox.v1.RunJobEvent.Finished.
+ * Use `create(RunJobEvent_FinishedSchema)` to create a new message.
+ */
+export const RunJobEvent_FinishedSchema: GenMessage<RunJobEvent_Finished> = /*@__PURE__*/
+  messageDesc(file_masuda_sandbox_v1_sandbox, 35, 1);
+
+/**
+ * @generated from message masuda.sandbox.v1.RunJobEvent.DeniedHost
+ */
+export type RunJobEvent_DeniedHost = Message<"masuda.sandbox.v1.RunJobEvent.DeniedHost"> & {
+  /**
+   * @generated from field: string host = 1;
+   */
+  host: string;
+
+  /**
+   * as in SandboxEvent.HttpRequestDenied.reason
+   *
+   * @generated from field: string reason = 2;
+   */
+  reason: string;
+
+  /**
+   * @generated from field: uint32 count = 3;
+   */
+  count: number;
+};
+
+/**
+ * Describes the message masuda.sandbox.v1.RunJobEvent.DeniedHost.
+ * Use `create(RunJobEvent_DeniedHostSchema)` to create a new message.
+ */
+export const RunJobEvent_DeniedHostSchema: GenMessage<RunJobEvent_DeniedHost> = /*@__PURE__*/
+  messageDesc(file_masuda_sandbox_v1_sandbox, 35, 2);
 
 /**
  * @generated from enum masuda.sandbox.v1.SubstituteIn
@@ -1319,6 +1772,20 @@ export const SandboxService: GenService<{
     methodKind: "unary";
     input: typeof ListImagesRequestSchema;
     output: typeof ListImagesResponseSchema;
+  },
+  /**
+   * Deletes an image: its record, its Gondolin assets, and the Docker image
+   * BuildImage made for it (tag and OCI digest; kept while another record of
+   * the same digest remains). FailedPrecondition while a sandbox booted from it
+   * is STARTING or RUNNING (RunJob's VMs included). A build_id with no record
+   * is a no-op (idempotent).
+   *
+   * @generated from rpc masuda.sandbox.v1.SandboxService.DeleteImage
+   */
+  deleteImage: {
+    methodKind: "unary";
+    input: typeof DeleteImageRequestSchema;
+    output: typeof DeleteImageResponseSchema;
   },
   /**
    * Creates and boots a VM. Returns once the guest accepts Exec. The id is
@@ -1436,6 +1903,23 @@ export const SandboxService: GenService<{
     methodKind: "server_streaming";
     input: typeof WatchEventsRequestSchema;
     output: typeof SandboxEventSchema;
+  },
+  /**
+   * Runs one job in a throwaway VM: creates the VM, puts the inputs in, runs
+   * setup_shell then shell, collects the outputs and destroys the VM, all in
+   * one call. The VM is always destroyed: on success, on failure, on
+   * cancellation (the client going away) and when the job deadline passes.
+   * The stream carries phases, output and denied requests, and ends with
+   * exactly one Finished (not sent on cancellation). A non-zero exit is not an
+   * error. If booting or putting the inputs in fails, the VM is destroyed and
+   * the RPC ends with that error.
+   *
+   * @generated from rpc masuda.sandbox.v1.SandboxService.RunJob
+   */
+  runJob: {
+    methodKind: "server_streaming";
+    input: typeof RunJobRequestSchema;
+    output: typeof RunJobEventSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_masuda_sandbox_v1_sandbox, 0);

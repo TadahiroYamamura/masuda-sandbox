@@ -159,6 +159,25 @@ export class ExecSlots {
   }
 }
 
+// timeout(1) also kills itself with the group, so a timed-out exec ends as
+// 128+KILL; 124 is what it reports when --foreground spares it. A command that
+// dies of SIGKILL on its own (the OOM killer) ends the same way, because
+// timeout(1) then re-raises the signal on itself, so the elapsed time is what
+// tells them apart.
+//
+// The deadline runs on the guest's clock and the elapsed time on the host's,
+// and the two disagree on freshly booted VMs: in the contract tests a 1.5 s
+// timeout fired after 1.17 s of host time in about one boot in four (the
+// first exec after boot of a RunJob VM). Half the deadline is accepted
+// instead of all of it; the cost is that an OOM kill in the second half of
+// the deadline is reported as a timeout, which was judged the smaller harm
+// than missing real timeouts.
+export function guestTimedOut(timeoutMs: number, elapsedMs: number, exitCode: number, signal: string): boolean {
+  if (timeoutMs <= 0) return false;
+  if (elapsedMs * 2 < timeoutMs) return false;
+  return exitCode === 137 || exitCode === 124 || signal === "SIGKILL";
+}
+
 const signalNames = new Map<number, string>(Object.entries(os.constants.signals).map(([name, num]) => [num, name]));
 
 export async function* runExec(vm: GuestVm, spec: ExecSpec, defaultUser: string, baseEnv: Record<string, string>, signal: AbortSignal): AsyncGenerator<ExecOutput> {
@@ -202,9 +221,7 @@ export async function* runExec(vm: GuestVm, spec: ExecSpec, defaultUser: string,
       throw new ConnectError(`exec failed: ${(e as Error).message}`, Code.Internal);
     }
     const sig = r.signal !== undefined ? (signalNames.get(r.signal) ?? String(r.signal)) : "";
-    // timeout(1) also kills itself with the group, so a timed-out exec ends
-    // as 128+KILL; 124 is what it reports when --foreground spares it.
-    const timedOut = spec.timeoutMs > 0 && Date.now() - started >= spec.timeoutMs && (r.exitCode === 137 || r.exitCode === 124 || sig === "SIGKILL");
+    const timedOut = guestTimedOut(spec.timeoutMs, Date.now() - started, r.exitCode, sig);
     yield { case: "exited", value: { exitCode: r.exitCode, signal: sig, timedOut } };
   } finally {
     clearTimeout(hostTimer);

@@ -29,6 +29,12 @@ service SandboxService {
   // stream carries build log lines and ends with a Built event.
   rpc BuildImage(BuildImageRequest) returns (stream BuildImageEvent);
   rpc ListImages(ListImagesRequest) returns (ListImagesResponse);
+  // Deletes an image: its record, its Gondolin assets, and the Docker image
+  // BuildImage made for it (tag and OCI digest; kept while another record of
+  // the same digest remains). FailedPrecondition while a sandbox booted from it
+  // is STARTING or RUNNING (RunJob's VMs included). A build_id with no record
+  // is a no-op (idempotent).
+  rpc DeleteImage(DeleteImageRequest) returns (DeleteImageResponse);
 
   // ---- lifecycle ----------------------------------------------------------
 
@@ -76,6 +82,18 @@ service SandboxService {
   // guest makes through the policy layer (start, finish, denial) and VM state
   // changes. This is the activity signal the guest cannot fake.
   rpc WatchEvents(WatchEventsRequest) returns (stream SandboxEvent);
+
+  // ---- jobs ---------------------------------------------------------------
+
+  // Runs one job in a throwaway VM: creates the VM, puts the inputs in, runs
+  // setup_shell then shell, collects the outputs and destroys the VM, all in
+  // one call. The VM is always destroyed: on success, on failure, on
+  // cancellation (the client going away) and when the job deadline passes.
+  // The stream carries phases, output and denied requests, and ends with
+  // exactly one Finished (not sent on cancellation). A non-zero exit is not an
+  // error. If booting or putting the inputs in fails, the VM is destroyed and
+  // the RPC ends with that error.
+  rpc RunJob(RunJobRequest) returns (stream RunJobEvent);
 }
 
 // ---- identity -----------------------------------------------------------------
@@ -128,6 +146,9 @@ message Image {
 
 message ListImagesRequest {}
 message ListImagesResponse { repeated Image images = 1; }
+
+message DeleteImageRequest { string build_id = 1; }
+message DeleteImageResponse {}
 
 // ---- lifecycle ----------------------------------------------------------------
 
@@ -370,5 +391,141 @@ message SandboxEvent {
   message StateChanged {
     SandboxState state = 1;
     string detail = 2;
+  }
+}
+
+// ---- jobs -----------------------------------------------------------------
+
+message RunJobRequest {
+  // The VM; same meaning as in CreateSandboxRequest (0 = default). A job's VM
+  // has no secrets, tcp_maps or ssh_egress.
+  string build_id = 1;
+  uint32 memory_mib = 2;
+  uint32 cpus = 3;
+  uint32 disk_mib = 4;
+  // Hosts the guest may reach over HTTP/TLS, written as in
+  // Policy.allowed_hosts. Empty: nothing. Fixed for the job's life.
+  repeated string allowed_hosts = 5;
+
+  // Guest user for setup_shell and shell. Empty = "root".
+  string user = 6;
+  // Working directory. Empty = "/workspace". Created (owned by user) if missing.
+  string cwd = 7;
+  // Environment for both setup_shell and shell, on top of the base
+  // environment described at ExecRequest.env.
+  map<string, string> env = 8;
+  // Optional preparation, run via `/bin/sh -lc` before shell with the same
+  // user, cwd and env. If it exits non-zero (or by a signal), shell is not run
+  // (outputs are still collected). Its output streams on stdout/stderr like
+  // shell's. Only job_timeout_ms bounds it.
+  string setup_shell = 9;
+  // What to run (required), via `/bin/sh -lc`.
+  string shell = 10;
+  // Deadline for shell; 0 = none. Same meaning as ExecRequest.timeout_ms.
+  uint32 timeout_ms = 11;
+  // Deadline for the whole job, from creating the VM to collecting outputs.
+  // 0 = the service default: the larger of 2 hours and timeout_ms + 30
+  // minutes. When it passes, the VM is destroyed and Finished.job_timed_out
+  // is set.
+  uint32 job_timeout_ms = 12;
+
+  // Put into the VM in order, after it boots and before setup_shell.
+  repeated Input inputs = 13;
+
+  // Files to collect: globs relative to cwd, with the rules of
+  // FromSandbox.patterns.
+  repeated string outputs = 14;
+  // Host directory (absolute; required with outputs) the service writes the
+  // collected files into, at their paths relative to cwd. Created if missing;
+  // existing files of the same name are overwritten. Files keep only the
+  // owner part of their guest permissions (nobody else may read them).
+  string outputs_host_dir = 15;
+  // Per-file limit; 0 = 64 MiB. Larger files are skipped and reported in
+  // outputs_error.
+  uint64 max_output_file_bytes = 16;
+  // Limit for all collected files together; 0 = 1 GiB. Files beyond it are
+  // skipped and reported in outputs_error.
+  uint64 max_output_total_bytes = 17;
+
+  message Input {
+    oneof source {
+      HostFile host_file = 1;
+      FromSandbox from_sandbox = 2;
+    }
+  }
+  // Copies one host file into the guest. The service process reads it (the
+  // same trust in the host account as BuildImageRequest.context_dir).
+  message HostFile {
+    string host_path = 1;   // absolute
+    string guest_path = 2;  // absolute; missing parents are created (owned by user)
+    uint32 mode = 3;        // 0 = 0644; owned by user
+  }
+  // Copies the files under root that match patterns from another, RUNNING
+  // sandbox to the same relative paths under dest_root in the job's VM. The
+  // copy goes VM to VM inside the service, never through the caller.
+  //
+  // patterns are globs relative to root: `/`-separated, without `..`, `.`,
+  // empty segments or `\`. Each segment is either `*` / `?` / `[...]` (never
+  // crossing `/`) or `**`, which matches zero or more segments. A pattern
+  // naming a directory does not match the files in it (write `dir/**`).
+  // Malformed patterns are InvalidArgument.
+  //
+  // Only regular files are copied. Anything named `.git` is not descended
+  // into. Symlinks are neither followed nor copied. Permission bits (the low
+  // 9) are kept; the owner is user. A pattern matching nothing is not an
+  // error. Per-file limit: ReadFile's default (64 MiB).
+  message FromSandbox {
+    string id = 1;
+    string root = 2;               // absolute, e.g. "/workspace"
+    repeated string patterns = 3;
+    string dest_root = 4;          // absolute; empty = cwd
+  }
+}
+
+message RunJobEvent {
+  oneof event {
+    Phase phase = 1;
+    bytes stdout = 2;
+    bytes stderr = 3;
+    // A request denied during the job. Watched from right after boot, so
+    // none is missed.
+    SandboxEvent.HttpRequestDenied denied = 4;
+    Finished finished = 5;
+  }
+
+  // Start of a phase: "creating", "inputs", "setup" (only with setup_shell),
+  // "running", "outputs", "destroying", in that order. sandbox_id is the id
+  // the service gave the job's VM ("job-<uuid>"). The VM shows in
+  // ListSandboxes while it lives, but leaves no record once the service stops
+  // (it is not written to sandboxes.json).
+  message Phase {
+    string name = 1;
+    string sandbox_id = 2;
+  }
+
+  // Sent once, last, after the VM was destroyed.
+  message Finished {
+    // How setup_shell ended; unset without setup_shell or if it never ran.
+    ExecEvent.Exited setup = 1;
+    // How shell ended; unset if it did not run or finish (setup_shell
+    // failed, or the job deadline passed).
+    ExecEvent.Exited exited = 2;
+    // job_timeout_ms passed and the VM was destroyed.
+    bool job_timed_out = 3;
+    // Collected files (relative to cwd, sorted), now under outputs_host_dir.
+    repeated string outputs = 4;
+    // Patterns that matched nothing and files that could not be read or
+    // were over a limit, joined by "; ". Whatever could be read is still
+    // collected (not all-or-nothing).
+    string outputs_error = 5;
+    // Requests denied during the job, counted per (host, reason), in the
+    // order first seen.
+    repeated DeniedHost denied_hosts = 6;
+  }
+
+  message DeniedHost {
+    string host = 1;
+    string reason = 2;  // as in SandboxEvent.HttpRequestDenied.reason
+    uint32 count = 3;
   }
 }

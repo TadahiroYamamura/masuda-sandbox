@@ -13,11 +13,11 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
-import { removeImage } from "./cleanup-image.js";
 import { connect, type Client } from "./client.js";
 import {
   SandboxState,
   SubstituteIn,
+  type RunJobEvent_Finished,
 } from "../../src/gen/masuda/sandbox/v1/sandbox_pb.js";
 
 const socket = process.env.MASUDA_SANDBOX_SOCKET;
@@ -55,6 +55,30 @@ async function write(id: string, p: string, content: string, mode = 0o644, owner
 
 const sid = (s: string) => `ct-${s}-${process.pid}`;
 
+type RunJobInit = Parameters<Client["runJob"]>[0];
+
+async function runJob(req: Partial<RunJobInit>, signal?: AbortSignal) {
+  const phases: string[] = [];
+  const denied: string[] = [];
+  let sandboxId = "";
+  let stdout = "";
+  let stderr = "";
+  let finished: RunJobEvent_Finished | undefined;
+  for await (const ev of client.runJob({ buildId, memoryMib: 1024, cpus: 1, ...req } as RunJobInit, { signal })) {
+    const e = ev.event;
+    if (e.case === "phase") { phases.push(e.value.name); sandboxId = e.value.sandboxId; }
+    if (e.case === "stdout") stdout += Buffer.from(e.value).toString();
+    if (e.case === "stderr") stderr += Buffer.from(e.value).toString();
+    if (e.case === "denied") denied.push(e.value.host);
+    if (e.case === "finished") finished = e.value;
+  }
+  return { phases, denied, sandboxId, stdout, stderr, finished: finished! };
+}
+
+async function sandboxIds() {
+  return (await client.listSandboxes({})).sandboxes.map((s) => s.id);
+}
+
 describe.skipIf(!socket)("sandbox contract", () => {
   beforeAll(async () => {
     client = await connect(socket!);
@@ -75,7 +99,7 @@ describe.skipIf(!socket)("sandbox contract", () => {
   // ---- C-S2 ---------------------------------------------------------------
   // Two steps. The first builds an OCI image no earlier run has seen, so the
   // assets cannot be reused and the build has to go through gondolin build;
-  // it is removed again at the end, from outside the service. The second is
+  // it is removed again at the end through DeleteImage. The second is
   // the long-lived contract:test image the later tests boot, which is reused
   // across runs to avoid ~400MB of new assets each time.
   it("C-S2 builds a never-seen image through to new assets and lists it", async () => {
@@ -93,7 +117,7 @@ describe.skipIf(!socket)("sandbox contract", () => {
       expect(list.images.map((i) => i.buildId)).toContain(built!.buildId);
     } finally {
       fs.rmSync(ctx, { recursive: true, force: true });
-      if (built?.buildId) await removeImage(built.buildId);
+      if (built?.buildId) await client.deleteImage({ buildId: built.buildId });
     }
     expect((await client.listImages({})).images.map((i) => i.buildId)).not.toContain(built!.buildId);
   }, 600_000);
@@ -267,6 +291,134 @@ describe.skipIf(!socket)("sandbox contract", () => {
     expect(sb.lastHttpActivity).toBeDefined();
     await client.destroySandbox({ id });
   }, 120_000);
+
+  // ---- C-S16 --------------------------------------------------------------
+  it("C-S16 RunJob puts a host file in, transforms it, collects outputs and leaves no VM", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ct-job-"));
+    try {
+      fs.writeFileSync(path.join(dir, "in.txt"), "hello");
+      const out = path.join(dir, "out");
+      const r = await runJob({
+        inputs: [{ source: { case: "hostFile", value: { hostPath: path.join(dir, "in.txt"), guestPath: "/workspace/in.txt", mode: 0 } } }],
+        shell: "pwd; id -un; mkdir -p result && tr a-z A-Z < in.txt > result/up.txt",
+        outputs: ["result/**"],
+        outputsHostDir: out,
+      });
+      expect(r.phases).toEqual(["creating", "inputs", "running", "outputs", "destroying"]);
+      expect(r.sandboxId).toMatch(/^job-/);
+      expect(r.stdout).toBe("/workspace\nroot\n");
+      expect(r.finished.exited?.exitCode).toBe(0);
+      expect(r.finished.setup).toBeUndefined();
+      expect(r.finished.jobTimedOut).toBe(false);
+      expect(r.finished.outputs).toEqual(["result/up.txt"]);
+      expect(r.finished.outputsError).toBe("");
+      expect(fs.readFileSync(path.join(out, "result", "up.txt"), "utf8")).toBe("HELLO");
+      expect(await sandboxIds()).not.toContain(r.sandboxId);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }, 180_000);
+
+  it("C-S16 RunJob reports a non-zero exit and a command timeout without failing the RPC", async () => {
+    const fail = await runJob({ shell: "echo err >&2; exit 7" });
+    expect(fail.finished.exited?.exitCode).toBe(7);
+    expect(fail.stderr).toContain("err");
+
+    const slow = await runJob({ shell: "sleep 30", timeoutMs: 1500 });
+    expect(slow.finished.exited?.timedOut).toBe(true);
+    expect(slow.finished.jobTimedOut).toBe(false);
+    expect(await sandboxIds()).not.toContain(slow.sandboxId);
+  }, 180_000);
+
+  it("C-S16 RunJob denies hosts that are not allowed and lists them", async () => {
+    const r = await runJob({
+      allowedHosts: ["example.com"],
+      shell: "curl -sS -m 15 -o /dev/null -w '%{http_code}\\n' https://example.com; curl -sS -m 5 -o /dev/null https://httpbin.org/get || true",
+    });
+    expect(r.stdout.split("\n")[0]).toBe("200");
+    expect(r.denied).toContain("httpbin.org");
+    expect(r.finished.deniedHosts).toContainEqual(expect.objectContaining({ host: "httpbin.org", reason: "host-not-allowed" }));
+    expect(r.finished.deniedHosts.map((d) => d.host)).not.toContain("example.com");
+  }, 180_000);
+
+  it("C-S16 RunJob does not run the command when setup fails", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ct-job-"));
+    try {
+      const r = await runJob({ setupShell: "echo preparing; exit 4", shell: "touch ran", outputs: ["ran"], outputsHostDir: dir });
+      expect(r.phases).toContain("setup");
+      expect(r.phases).not.toContain("running");
+      expect(r.stdout).toContain("preparing");
+      expect(r.finished.setup?.exitCode).toBe(4);
+      expect(r.finished.exited).toBeUndefined();
+      expect(r.finished.outputs).toEqual([]);
+      expect(r.finished.outputsError).toContain("ran");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }, 180_000);
+
+  it("C-S16 RunJob copies files from another sandbox, keeping modes and skipping .git and symlinks", async () => {
+    const src = sid("s16-src");
+    try {
+      await client.createSandbox({ id: src, buildId, memoryMib: 1024, cpus: 1, defaultUser: "ubuntu", secrets: [], tcpMaps: [] });
+      await write(src, "/workspace/.env", "K=V\n", 0o600);
+      await write(src, "/workspace/bin/run.sh", "#!/bin/sh\n", 0o755);
+      await write(src, "/workspace/.git/config", "[core]\n");
+      await exec(src, "ln -s /etc/hostname /workspace/link");
+      const r = await runJob({
+        inputs: [{ source: { case: "fromSandbox", value: { id: src, root: "/workspace", patterns: [".env", "bin/**", "link", ".git/**"], destRoot: "" } } }],
+        shell: "stat -c '%a %n' .env bin/run.sh; cat .env; test -e link && echo has-link || echo no-link; test -e .git/config && echo has-git || echo no-git",
+      });
+      expect(r.stdout).toBe("600 .env\n755 bin/run.sh\nK=V\nno-link\nno-git\n");
+    } finally {
+      await client.destroySandbox({ id: src }).catch(() => {});
+    }
+  }, 180_000);
+
+  it("C-S16 RunJob destroys the VM when the client cancels the stream", async () => {
+    const ac = new AbortController();
+    let jobId = "";
+    try {
+      for await (const ev of client.runJob({ buildId, memoryMib: 1024, cpus: 1, shell: "sleep 600" }, { signal: ac.signal })) {
+        if (ev.event.case === "phase") {
+          jobId = ev.event.value.sandboxId;
+          if (ev.event.value.name === "running") ac.abort();
+        }
+      }
+    } catch (e) {
+      expect(e).toMatchObject({ code: Code.Canceled });
+    }
+    expect(jobId).toMatch(/^job-/);
+    const deadline = Date.now() + 30_000;
+    while ((await sandboxIds()).includes(jobId) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 500));
+    expect(await sandboxIds()).not.toContain(jobId);
+  }, 180_000);
+
+  it("C-S16 DeleteImage refuses an image in use, then removes it, idempotently", async () => {
+    const ctx = fs.mkdtempSync(path.join(os.tmpdir(), "ct-image-delete-"));
+    fs.writeFileSync(path.join(ctx, "Dockerfile"), `${fs.readFileSync(path.join(imageDir, "Dockerfile"), "utf8")}RUN echo ${randomUUID()} > /fresh\n`);
+    const id = sid("s16-del");
+    let doomed = "";
+    try {
+      for await (const ev of client.buildImage({ contextDir: ctx, dockerfile: "Dockerfile", name: "contract:delete", arch: "" })) {
+        if (ev.event.case === "built") doomed = ev.event.value.buildId;
+      }
+      expect(doomed).toMatch(/^[0-9a-f-]{36}$/);
+      await client.createSandbox({ id, buildId: doomed, memoryMib: 1024, cpus: 1, defaultUser: "ubuntu", secrets: [], tcpMaps: [] });
+      await expect(client.deleteImage({ buildId: doomed })).rejects.toMatchObject({ code: Code.FailedPrecondition });
+      expect((await client.listImages({})).images.map((i) => i.buildId)).toContain(doomed);
+
+      await client.destroySandbox({ id });
+      await client.deleteImage({ buildId: doomed });
+      expect((await client.listImages({})).images.map((i) => i.buildId)).not.toContain(doomed);
+      await client.deleteImage({ buildId: doomed }); // idempotent
+      await expect(client.createSandbox({ id, buildId: doomed, defaultUser: "ubuntu" })).rejects.toMatchObject({ code: Code.NotFound });
+    } finally {
+      fs.rmSync(ctx, { recursive: true, force: true });
+      await client.destroySandbox({ id }).catch(() => {});
+      if (doomed) await client.deleteImage({ buildId: doomed }).catch(() => {});
+    }
+  }, 600_000);
 });
 
 async function readAll_limited(id: string, p: string, max: bigint) {
