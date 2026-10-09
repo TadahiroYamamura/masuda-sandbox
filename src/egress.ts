@@ -284,6 +284,11 @@ export class Egress {
       // Hosts are decided by isRequestAllowed against the mutable policy;
       // Gondolin's own list is fixed at creation and so left open.
       allowedHosts: undefined,
+      // Stated rather than left to Gondolin's default: a guest that is granted
+      // 127.0.0.1 or localhost in egress must still not reach the host's
+      // loopback, where masuda serve's public API (gate decisions included)
+      // may listen. masuda#13 was closed on this guarantee.
+      blockInternalRanges: true,
       secrets: Object.fromEntries(
         this.secrets.filter((s) => s.header).map((s) => [s.name, { hosts: this.enabled(s) ? s.hosts : [], value: s.value, placeholder: s.placeholder }]),
       ),

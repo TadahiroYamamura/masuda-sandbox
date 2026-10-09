@@ -65,6 +65,16 @@ describe("Egress", () => {
     await expect(send(new Request("https://evil.example.net/", { method: "POST", body: eg.placeholders.BODY }))).rejects.toThrow(/secret-not-enabled/);
   });
 
+  it("refuses internal addresses even for a host the policy allows", async () => {
+    const { eg } = setup();
+    eg.setPolicy({ allowedHosts: ["localhost", "127.0.0.1", "internal.example.com", "api.example.com"], enabledSecrets: [] });
+    const allowed = (hostname: string, ip: string) => eg.httpHooks.isIpAllowed!({ hostname, ip } as never);
+    for (const [hostname, ip] of [["localhost", "127.0.0.1"], ["127.0.0.1", "127.0.0.1"], ["localhost", "::1"], ["internal.example.com", "10.0.0.5"], ["internal.example.com", "192.168.1.10"], ["internal.example.com", "172.16.0.1"]]) {
+      expect(await allowed(hostname, ip), `${hostname} ${ip}`).toBe(false);
+    }
+    expect(await allowed("api.example.com", "93.184.216.34")).toBe(true);
+  });
+
   it("rejects unknown names in enabled_secrets", () => {
     const { eg } = setup();
     expect(() => eg.setPolicy({ allowedHosts: [], enabledSecrets: ["NOPE"] })).toThrow(/unknown secret/);
