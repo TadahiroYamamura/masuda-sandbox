@@ -29,6 +29,20 @@ while [ -r "/proc/$pid/stat" ] && [ "$(sed 's/.*) //' "/proc/$pid/stat" | cut -d
 done
 rm -f /run/sshd.pid`;
 
+// Kills every sshd in the guest, the listener and the per-session processes
+// (named sshd-session from OpenSSH 9.8), so that a client still attached
+// (masuda chat) is disconnected instead of hanging on a VM that is gone.
+// It does not make access.close() return: Gondolin 0.12.0's forwarder never
+// finishes closing a connection the guest ended first (once the tunnel closes,
+// the host socket is left paused and never reads the client's FIN), and
+// access.close() waits for every connection. closeGuest bounds that wait.
+// /proc is walked because the image need not ship procps.
+const KILL_SSHD = `for d in /proc/[0-9]*; do
+  read -r c < "$d/comm" 2>/dev/null || continue
+  case "$c" in sshd*) kill -KILL "\${d#/proc/}" 2>/dev/null ;; esac
+done
+exit 0`;
+
 // One SSH access per sandbox. Gondolin keeps a single access per VM (a second
 // enableSsh returns the first one unchanged, whatever the user), so a new
 // EnableSsh, for the same user or another, replaces the previous access; that
@@ -88,9 +102,13 @@ export class GuestSsh {
     });
   }
 
+  // Unlike disable, ends the sessions too: it runs only when the VM goes away.
   close(): Promise<void> {
     this.closed = true;
-    return this.serial(() => this.closeAccess());
+    return this.serial(async () => {
+      if (this.sshdUser !== undefined) await this.vm.exec(["/bin/sh", "-c", KILL_SSHD]);
+      await this.closeAccess();
+    });
   }
 
   private async closeAccess(): Promise<void> {

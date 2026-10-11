@@ -240,7 +240,7 @@ describe.skipIf(!socket)("sandbox contract", () => {
   }, 120_000);
 
   // ---- C-S6 ---------------------------------------------------------------
-  it("C-S6 reaches a host-local listener through tcp_maps and attaches over SSH", async () => {
+  it("C-S6 reaches a host-local listener through tcp_maps, attaches over SSH, and destroys while attached", async () => {
     const server = http.createServer((_req, res) => res.end("hello from host"));
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
     const port = (server.address() as any).port as number;
@@ -264,6 +264,24 @@ describe.skipIf(!socket)("sandbox contract", () => {
       );
       expect(out).toContain("claude-work");
       await client.disableSsh({ id, user: "ubuntu" });
+
+      // masuda chat left attached when the run ends: destroying must not wait for the session
+      const again = await client.enableSsh({ id, user: "ubuntu" });
+      fs.writeFileSync(keyFile, Buffer.from(again.privateKeyPem), { mode: 0o600 });
+      const { spawn } = await import("node:child_process");
+      const attached = spawn("ssh", ["-tt", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "-i", keyFile, "-p", String(again.port), `${again.user}@${again.host}`, "sleep 600"], { stdio: ["pipe", "ignore", "ignore"] });
+      const attachedExit = new Promise<void>((r) => attached.on("exit", () => r()));
+      try {
+        await new Promise((r) => setTimeout(r, 3_000));
+        expect(attached.exitCode).toBeNull();
+        const started = Date.now();
+        await client.destroySandbox({ id });
+        expect(Date.now() - started).toBeLessThan(30_000);
+        expect(await sandboxIds()).not.toContain(id);
+        await Promise.race([attachedExit, new Promise((_, reject) => setTimeout(() => reject(new Error("the attached ssh session outlived destroy")), 15_000))]);
+      } finally {
+        attached.kill("SIGKILL");
+      }
     } finally {
       await client.destroySandbox({ id }).catch(() => {});
       server.close();

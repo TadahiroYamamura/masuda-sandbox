@@ -286,8 +286,43 @@ export class SandboxRegistry {
 async function closeVm(e: Entry): Promise<void> {
   clearInterval(e.monitor);
   e.monitor = undefined;
-  await e.ssh?.close().catch((err) => log.error("closing ssh access failed", { id: e.record.id, error: err }));
-  if (e.vm) await e.vm.close();
+  await closeGuest(e.record.id, e.vm, e.ssh);
+}
+
+// Each stage is bounded because both can wait forever: Gondolin 0.12.0's ssh
+// access.close() never returns once a session was ended from the guest side,
+// which is what closing does to a session still attached (see KILL_SSHD in
+// ssh.ts), and vm.close() closes the same access again before anything else,
+// so it hangs too. Past the limit the QEMU process
+// is killed and the pending close is left behind (logged), so that destroy
+// still finishes and no VM keeps running behind a removed record. The price is
+// that Gondolin's own cleanup after the ssh access (its root disk copy under
+// the temp directory, sockets) is skipped for that VM; fixing the forwarder
+// upstream removes it, which is why the cleanup is not redone here.
+export async function closeGuest(id: string, vm: GuestVm | undefined, ssh: Pick<GuestSsh, "close"> | undefined, limitMs = CLOSE_STAGE_LIMIT_MS): Promise<void> {
+  if (ssh) {
+    const r = await within(ssh.close().catch((err) => log.error("closing ssh access failed", { id, error: err })), limitMs);
+    if (r === TIMED_OUT) log.error("closing ssh access timed out", { id, limitMs });
+  }
+  if (!vm) return;
+  if ((await within(vm.close(), limitMs)) !== TIMED_OUT) return;
+  const pid = vm.getHostPid();
+  log.error("closing the VM timed out; killing qemu", { id, limitMs, pid });
+  if (pid === null) return;
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ESRCH") log.error("killing qemu failed", { id, pid, error: err });
+  }
+}
+
+const CLOSE_STAGE_LIMIT_MS = 10_000;
+const TIMED_OUT = Symbol("timed out");
+
+function within<T>(p: Promise<T>, ms: number): Promise<T | typeof TIMED_OUT> {
+  let timer: NodeJS.Timeout | undefined;
+  const limit = new Promise<typeof TIMED_OUT>((resolve) => (timer = setTimeout(() => resolve(TIMED_OUT), ms)));
+  return Promise.race([p, limit]).finally(() => clearTimeout(timer));
 }
 
 const MONITOR_INTERVAL_MS = 5_000;
