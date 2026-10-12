@@ -398,7 +398,7 @@ message SandboxEvent {
 
 message RunJobRequest {
   // The VM; same meaning as in CreateSandboxRequest (0 = default). A job's VM
-  // has no secrets, tcp_maps or ssh_egress.
+  // has no tcp_maps or ssh_egress.
   string build_id = 1;
   uint32 memory_mib = 2;
   uint32 cpus = 3;
@@ -446,6 +446,14 @@ message RunJobRequest {
   // Limit for all collected files together; 0 = 1 GiB. Files beyond it are
   // skipped and reported in outputs_error.
   uint64 max_output_total_bytes = 17;
+
+  // Secrets the job may use, with the meaning of CreateSandboxRequest.secrets.
+  // All are substituted for the whole job (there is no policy to change
+  // during a job). Their placeholders are in the environment of setup_shell
+  // and shell, as in ExecRequest.env's base environment. The real value is
+  // sent only to the secret's hosts, and only if allowed_hosts lets the guest
+  // reach them.
+  repeated SecretDecl secrets = 18;
 
   message Input {
     oneof source {

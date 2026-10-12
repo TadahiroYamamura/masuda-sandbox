@@ -408,12 +408,12 @@ export function sandboxJobEnv(registry: SandboxRegistry, images: ImageStore): Jo
         diskMib: req.diskMib,
         imageEnv: parseImageEnv(image.env ?? []),
         env: { ...req.env },
-        policy: { allowedHosts: [...req.allowedHosts], enabledSecrets: [] },
-        secretNames: [],
+        policy: { allowedHosts: [...req.allowedHosts], enabledSecrets: req.secrets.map((s) => s.name) },
+        secretNames: req.secrets.map((s) => s.name),
         tcpMaps: [],
       };
       try {
-        await registry.create(record, [], imageDir, { ephemeral: true });
+        await registry.create(record, req.secrets, imageDir, { ephemeral: true });
       } catch (e) {
         if (e instanceof ConnectError) throw e;
         log.error("job sandbox boot failed", { id, error: e });

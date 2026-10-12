@@ -341,6 +341,31 @@ describe.skipIf(!socket)("sandbox contract", () => {
     expect(r.finished.deniedHosts.map((d) => d.host)).not.toContain("example.com");
   }, 180_000);
 
+  it("C-S16 RunJob substitutes its secrets for the whole job, only toward their hosts", async () => {
+    const r = await runJob({
+      allowedHosts: ["httpbin.org", "example.com"],
+      secrets: [{ name: "JOB_TOKEN", value: "real-job-secret-789", hosts: ["httpbin.org"], substituteIn: [SubstituteIn.HEADER] }],
+      setupShell: `echo "setup:$JOB_TOKEN"`,
+      shell: [
+        `echo "shell:$JOB_TOKEN"`,
+        `curl -sS -m 15 https://httpbin.org/headers -H "Authorization: Bearer $JOB_TOKEN"`,
+        `curl -sS -m 15 -o /dev/null https://example.com -H "Authorization: Bearer $JOB_TOKEN" || true`,
+      ].join("; "),
+    });
+    expect(r.finished.exited?.exitCode).toBe(0);
+    const lines = r.stdout.split("\n");
+    const setupPh = lines.find((l) => l.startsWith("setup:"))!.slice("setup:".length);
+    const shellPh = lines.find((l) => l.startsWith("shell:"))!.slice("shell:".length);
+    expect(setupPh).toMatch(/^masuda_secret_[A-Za-z0-9]+$/);
+    expect(shellPh).toBe(setupPh);
+    // The guest only ever sees the placeholder; the secret's host gets the real value.
+    expect(lines.filter((l) => l.startsWith("setup:") || l.startsWith("shell:")).join("\n")).not.toContain("real-job-secret-789");
+    expect(r.stdout).toContain("Bearer real-job-secret-789");
+    // An allowed host that is not the secret's is refused the placeholder.
+    expect(r.finished.deniedHosts).toContainEqual(expect.objectContaining({ host: "example.com", reason: "secret-not-enabled" }));
+    expect(await sandboxIds()).not.toContain(r.sandboxId);
+  }, 180_000);
+
   it("C-S16 RunJob does not run the command when setup fails", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ct-job-"));
     try {
