@@ -1,28 +1,40 @@
 # HANDOFF
 ## 作業項目
-2026-10-09: #6。`src/egress.ts`の`createHttpHooks`に`blockInternalRanges: true`を明示した（`0ecc6b4`、`main`にpush済み、未タグ）。Gondolinの既定に頼っていた。masuda#13（triageゲートの自己解決の禁止）は「ゲストがegressで127.0.0.1やlocalhostを承認されても、ホストのループバックのmasuda serveには届かない」ことを根拠の1つにしている。作業はmasudaのセッション（masuda-d3）が行った。
+2026-10-14: #11（VMの中でカーネルのモジュールを読み込めない）。`cac186f`（`main`にpush済み、未タグ）。作業はmasudaのセッションが行った。
 
-**Issueの棚卸し（2026-10-09、ユーザー判断）**: マイルストーン`v0.4.0`・`v0.4.1`・`v0.5`を作った。振り分けは次のとおり。
+- `src/modules.ts`の`unpackKernelModules`を、`src/vm.ts`の`bootVm`で`vm.start()`の直後に呼ぶ。ゲストでrootとして`/lib/modules/$(uname -r)`の`.ko.gz`を展開し、`depmod -a`する
+- depmodの無いイメージでは何もしない。`gzip -l`で展開後の大きさを測り、空きが足りなければ（展開後の大きさ＋64MiB未満）展開せずにログを出す
+- 失敗しても起動は止めず、ログ（`unpacking kernel modules failed`）に出す
+- エージェントのVMも`RunJob`の特権VMも、同じ`registry.create`→`bootVm`を通る
 
-| マイルストーン | Issue |
-|---|---|
-| v0.4.1（VMの作業） | #8（sshでアタッチ中だとDestroySandboxが終わらない。masuda#84の前提。sandbox側で破棄の各段に上限を設けてQEMUを止める方向）、#11（VMの中で`.ko.gz`を読めない。上流のgondolin#161と同じ件） |
-| v0.5 | #4（S15 スリープ後の時計）、#1（S8 SSH egress） |
-| 無し（保留） | #9（GondolinのTCP、上流#155〜#160の返事待ち）、#2（非公開APIへの依存。Gondolinの版上げのときに確認項目を回す）、#3（読み取り専用ディレクトリの件。上流への報告は、#155への反応を見てから慎重に） |
-
-前回（2026-10-07、v0.3.0のRunJob・DeleteImage）の未完は下に残した。
+ユーザーの判断（10-14）: 案A'。
+- `init.rootfsInitExtra`に書く案Aは試して失敗した。Gondolinがディスクを`disk_mib`へ拡げる（`resize2fs`）のは`start()`の中で、rootfsInitExtraより後。そのため空きが常に足りなかった
+- ビルドの時点で展開する案は、Gondolinの内部に頼り、版上げで黙って元に戻るので取らない
+  - 展開済みのモジュールをイメージに先に置く
+  - `mke2fs`を包む
+  - `rootfs.ext4`を書き換える
+- 代わりに、VMごとに1〜2秒と約110MBのディスクを使う
 ## 完了した契約テスト
-- 単体テスト149件とCIが緑（`0ecc6b4`）。足したテスト: 方針で許したホストでも内部アドレス（127/8、::1、10/8、172.16/12、192.168/16）への接続が断られ、外部のアドレスは通る（`test/unit/egress.test.ts`）。`blockInternalRanges: false`にすると落ちる
-- 契約テスト（実VM）は今回回していない。前回はC-S1〜C-S7とC-S16の15件が緑（`0d31786`）。v0.4.0のリリース前に回す
+- 単体テスト154件が緑。`test/unit/modules.test.ts`の5件は、偽の`depmod`・`df`を使い、次を確かめる
+  - 展開する
+  - 空きが1KiB足りなければ展開しない
+  - depmodが無ければ何もしない
+  - 展開済みなら何もしない
+  - 呼び出しの形
+- 判定の分岐を壊すと、すべてテストが落ちることを確かめた
+- 実VM（開発版のサービス、一時のプローブ）で確かめたこと：
+  - kmodの入ったイメージ・`disk_mib` 2048：889個を展開し、`modprobe -a overlay bridge veth br_netfilter nf_tables nf_nat nf_conntrack xt_MASQUERADE nft_chain_nat nft_compat`が通る。`CreateSandbox`が約1.5〜2秒延びる
+  - 既定のディスク：展開せず、`kernel modules left compressed: 112221KiB needed, 72412KiB free`をログに出す
+  - kmodの無いイメージ：何もしない
+- 契約テスト（C-S*）は回していない。v0.5.0のリリース前に回す
 ## 未完と理由
-- v0.4.0のタグ: masudaのリリース（Skill `release`、週末）のときに打つ。その前に契約テストを実VMで回す
-- #11: 上流のgondolin#161にUbuntu 24.04での再現と、ビルドの設定では避けにくいことをコメントした（masudaの`~/work/gondolin-notes/`）。上流の反応を見て、v0.4.1でsandbox側の手当て（起動時に展開するか、ビルド時か）をするか決める
-- S8（SSH egress）は手を付けていない
+- #11は閉じていない。dockerdを特権VMで動かす1周（masuda経由）を、v0.5.0を出した後にハーネスで確かめてから閉じる
+- 展開したときのログに`depmod: ERROR: fstatat(3, vmlinuz): No such file or directory`が1行入る（害は無い）
+- #8の保険`8670a19`（`fix/destroy-with-ssh`）はmainに入っていない（判断待ち）
 - DeleteImageの「使用中か」の確認と削除の間に、同じイメージでCreateSandbox・RunJobが始まると起動に失敗しうる（直していない）
-- ゲストの時計がずれる原因は調べていない（S15と根が近いかもしれない）
 ## 次の一手
-1. 週末のv0.4.0のリリース前に契約テストを実VMで回し、タグを打つ
-2. v0.4.1の#8（masuda#84の前提）
+1. v0.5.0のリリース（masudaのSkill `release`）。その前に契約テストを実VMで回す
+2. リリース後、ハーネスで#11を確かめて閉じる
 ## 注意点
 - 契約テストは専用のソケット（例 `$XDG_RUNTIME_DIR/masuda-sandbox-<名前>.sock`）で立てたサービスに対して回す。回す前にハーネス（masudaの`masuda list --all`）に走行中のワークスペースが無いことを確かめ、終わったら自分のサービスのPIDをkillして`pgrep -af qemu-system`を見る
 - `pnpm test`は`pnpm build`済みのdistを前提にする（`test/unit/dist.test.ts`）
