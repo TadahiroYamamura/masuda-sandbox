@@ -2,6 +2,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { VM, type DebugLogFn, type HttpHooks } from "@earendil-works/gondolin";
 
 import type { GuestConnections } from "./egress.js";
+import { unpackKernelModules } from "./modules.js";
 import { watchConnections } from "./netwatch.js";
 import type { SandboxRecord } from "./sandboxes.js";
 import { toTcpHosts } from "./tcpmaps.js";
@@ -50,5 +51,6 @@ export async function bootVm(rec: SandboxRecord, imageDir: string, env: Record<s
     }
     throw e;
   }
+  await unpackKernelModules(vm, rec.id);
   return vm;
 }
